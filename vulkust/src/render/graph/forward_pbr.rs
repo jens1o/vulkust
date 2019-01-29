@@ -7,6 +7,7 @@ use super::super::image::{AttachmentType, Format, View as ImageView};
 use super::super::pipeline::{Pipeline, PipelineType};
 use super::super::render_pass::RenderPass;
 use super::super::texture::{Manager as TextureManager, Texture};
+use super::Pass;
 use std::sync::{Arc, RwLock};
 
 #[cfg_attr(debug_mode, derive(Debug))]
@@ -69,5 +70,11 @@ impl Transparent {
 
     pub(crate) fn get_color_texture(&self) -> &Arc<RwLock<Texture>> {
         return &self.color_texture;
+    }
+}
+
+impl Pass for Transparent {
+    fn get_pass_type_id(&self) -> Id {
+        return;
     }
 }

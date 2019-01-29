@@ -1,16 +1,16 @@
-use super::super::core::types::Real;
-use super::buffer::Dynamic as DynamicBuffer;
-use super::command::Buffer as CmdBuffer;
-use super::config::Configurations;
-use super::descriptor::Set as DescriptorSet;
+use super::super::super::core::types::Real;
+use super::super::buffer::Dynamic as DynamicBuffer;
+use super::super::command::Buffer as CmdBuffer;
+use super::super::config::Configurations;
+use super::super::descriptor::Set as DescriptorSet;
+use super::super::gapi::GraphicApiEngine;
+use super::super::pipeline::{Pipeline, PipelineType};
+use super::super::texture::{Manager as TextureManager, Texture};
 use super::g_buffer_filler::GBufferFiller;
-use super::gapi::GraphicApiEngine;
-use super::pipeline::{Pipeline, PipelineType};
 use super::shadower::Shadower;
 use super::ssao::SSAO;
-use super::texture::Manager as TextureManager;
 use std::mem::size_of;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use cgmath;
 
@@ -29,14 +29,14 @@ impl Uniform {
 }
 
 #[cfg_attr(debug_mode, derive(Debug))]
-pub struct Deferred {
+pub struct DeferredPBR {
     uniform: Uniform,
     uniform_buffer: DynamicBuffer,
     descriptor_set: Arc<DescriptorSet>,
     pipeline: Arc<Pipeline>,
 }
 
-impl Deferred {
+impl DeferredPBR {
     pub(crate) fn new(
         gapi_engine: &GraphicApiEngine,
         g_buffer_filler: &GBufferFiller,
@@ -50,7 +50,8 @@ impl Deferred {
         let uniform = Uniform::new(w as f32, h as f32);
         let uniform_buffer = vxresult!(gapi_engine.get_buffer_manager().write())
             .create_dynamic_buffer(size_of::<Uniform>() as isize);
-        let mut textures = Vec::with_capacity(g_buffer_filler.get_textures().len() + 2);
+        let mut textures: Vec<Arc<RwLock<Texture>>> =
+            Vec::with_capacity(g_buffer_filler.get_textures().len() + 2);
         for t in g_buffer_filler.get_textures() {
             textures.push(t.clone());
         }
@@ -65,7 +66,7 @@ impl Deferred {
         let mut pipmgr = vxresult!(gapi_engine.get_pipeline_manager().write());
         let render_pass = gapi_engine.get_render_pass();
         let pipeline = pipmgr.create(render_pass.clone(), PipelineType::Deferred, config);
-        Deferred {
+        Self {
             uniform,
             uniform_buffer,
             descriptor_set,
