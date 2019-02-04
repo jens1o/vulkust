@@ -4,6 +4,9 @@ pub mod shadow_mapper;
 pub mod ssao;
 pub mod ssr;
 
+use super::super::super::core::debug::Debug as CoreDebug;
+use std::sync::{Arc, RwLock, Weak};
+
 /// Node is reponsible to record command buffers.
 /// It gathers all the needed data like pipeline, descriptor-sets, ... .
 /// Each node has input and output links.
@@ -16,7 +19,9 @@ pub mod ssr;
 /// So do not forget provider is responsible for signaling its registered consumers
 /// and consumers are responsible for waiting on signal of provider for using data
 /// Each node will get data of the light, scene, camera, model, ...
-use std::sync::{Arc, Mutex, RwLock, Weak};
+/// Always there is and must be a single provider for each dependancy
+/// But there might be several or zero consumer for a data
+/// This system can be used to push independant commands on separate queue
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub enum LinkId {
@@ -27,21 +32,40 @@ pub enum LinkId {
     Depth,
 }
 
-pub trait Node {
+pub trait Node: CoreDebug {
     fn get_name(&self) -> &str;
+    fn get_input_links_names(&self) -> &[&str];
+    fn get_input_links_ids(&self) -> &[LinkId];
+    fn get_input_link_index_by_name(&self, &str) -> Option<usize>;
+    fn get_input_link_index_by_id(&self, LinkId) -> Option<usize>;
+    fn get_output_links_names(&self) -> &[&str];
+    fn get_output_links_ids(&self) -> &[LinkId];
+    fn get_output_link_index_by_name(&self, &str) -> Option<usize>;
+    fn get_output_link_index_by_id(&self, LinkId) -> Option<usize>;
 
-    fn get_link_index_by_name(&self, &str) -> Option<usize>;
-    fn get_link_index_by_id(&self, LinkId) -> Option<usize>;
+    fn get_link_consumers(&self, usize) -> &[Weak<RwLock<Node>>];
+    fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>];
 
-    fn register_consumer_for_link_by_name(&self, name: &str, o: &Weak<Node>) {
-        self.register_consumer_for_link(vxunwrap!(self.get_link_index_by_name(name)), o);
+    fn register_consumer_for_link_by_name(&mut self, name: &str, o: Weak<RwLock<Node>>) {
+        self.register_consumer_for_link(vxunwrap!(self.get_output_link_index_by_name(name)), o);
     }
 
-    fn register_consumer_for_link_by_id(&self, id: LinkId, o: &Weak<Node>) {
-        self.register_consumer_for_link(vxunwrap!(self.get_link_index_by_id(id)), o);
+    fn register_consumer_for_link_by_id(&mut self, id: LinkId, o: Weak<RwLock<Node>>) {
+        self.register_consumer_for_link(vxunwrap!(self.get_output_link_index_by_id(id)), o);
     }
 
-    fn register_consumer_for_link(&self, usize, &Weak<Node>);
+    fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
 
-    fn register_provider_for_link_by_name(&self, &str, &Arc<Node>);
+    fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
+    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
+
+    fn register_provider_for_link_by_name(&mut self, name: &str, o: Arc<RwLock<Node>>) {
+        self.register_provider_for_link(vxunwrap!(self.get_input_link_index_by_name(name)), o);
+    }
+
+    fn register_provider_for_link_by_id(&mut self, id: LinkId, o: Arc<RwLock<Node>>) {
+        self.register_provider_for_link(vxunwrap!(self.get_input_link_index_by_id(id)), o);
+    }
+
+    fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
 }
