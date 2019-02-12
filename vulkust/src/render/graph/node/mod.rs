@@ -22,6 +22,7 @@ use std::sync::{Arc, RwLock, Weak};
 /// Always there is and must be a single provider for each dependancy
 /// But there might be several or zero consumer for a data
 /// This system can be used to push independant commands on separate queue
+/// It must create a new
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub enum LinkId {
@@ -68,4 +69,6 @@ pub trait Node: CoreDebug {
     }
 
     fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
+
+    fn create_new(&self) -> Arc<RwLock<Node>>;
 }

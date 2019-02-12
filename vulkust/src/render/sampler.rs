@@ -7,7 +7,7 @@ pub(crate) use super::super::metal::sampler::*;
 #[cfg(vulkan_api)]
 pub(crate) use super::super::vulkan::sampler::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(debug_mode, derive(Debug))]
 pub enum Filter {
     Nearest,

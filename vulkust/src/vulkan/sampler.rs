@@ -2,7 +2,8 @@ use super::super::render::sampler::Filter;
 use super::device::Logical as LogicalDevice;
 use ash::version::DeviceV1_0;
 use ash::vk;
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Weak};
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct Sampler {
@@ -11,11 +12,7 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    pub(crate) fn new(logical_device: Arc<LogicalDevice>) -> Self {
-        return Self::new_with_filter(logical_device, Filter::Linear);
-    }
-
-    pub(crate) fn new_with_filter(logical_device: Arc<LogicalDevice>, f: Filter) -> Self {
+    fn new(logical_device: Arc<LogicalDevice>, f: Filter) -> Self {
         let filter = Self::convert_filter(f);
         let mut info = vk::SamplerCreateInfo::builder()
             .border_color(vk::BorderColor::FLOAT_TRANSPARENT_BLACK)
@@ -81,5 +78,31 @@ impl Drop for Sampler {
                 .get_data()
                 .destroy_sampler(self.vk_data, None);
         }
+    }
+}
+
+#[cfg_attr(debug_mode, derive(Debug))]
+pub struct Manager {
+    logical_device: Arc<LogicalDevice>,
+    samplers: BTreeMap<Filter, Weak<Sampler>>,
+}
+
+impl Manager {
+    pub(super) fn new(logical_device: Arc<LogicalDevice>) -> Self {
+        Self {
+            logical_device,
+            samplers: BTreeMap::new(),
+        }
+    }
+
+    pub fn load(&mut self, f: Filter) -> Arc<Sampler> {
+        if let Some(s) = self.samplers.get(&f) {
+            if let Some(s) = s.upgrade() {
+                return s;
+            }
+        }
+        let s = Arc::new(Sampler::new(self.logical_device.clone(), f));
+        self.samplers.insert(f, Arc::downgrade(&s));
+        return s;
     }
 }

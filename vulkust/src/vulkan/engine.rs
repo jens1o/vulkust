@@ -1,5 +1,4 @@
 use super::super::core::config::Configurations;
-use super::super::render::sampler::Filter as SamplerFilter;
 use super::super::system::os::application::Application as OsApp;
 use super::buffer::Manager as BufferManager;
 use super::command::{Buffer as CmdBuffer, Pool as CmdPool, Type as CmdPoolType};
@@ -12,14 +11,77 @@ use super::instance::Instance;
 use super::memory::Manager as MemoryManager;
 use super::pipeline::Manager as PipelineManager;
 use super::render_pass::RenderPass;
-use super::sampler::Sampler;
+use super::sampler::Manager as SamplerManager;
 use super::surface::Surface;
 use super::swapchain::{NextImageResult, Swapchain};
 use super::sync::Fence;
 use super::sync::Semaphore;
 use ash::version::DeviceV1_0;
 use ash::vk;
+use num_cpus;
 use std::sync::{Arc, Mutex, RwLock};
+
+#[cfg_attr(debug_mode, derive(Debug))]
+struct KernelData {
+    graphic_cmd_pool: Arc<CmdPool>,
+}
+
+impl KernelData {
+    fn new(logical_device: Arc<LogicalDevice>) -> Self {
+        let graphic_cmd_pool = Arc::new(CmdPool::new(
+            logical_device,
+            CmdPoolType::Graphic,
+            vk::CommandPoolCreateFlags::empty(),
+        ));
+        Self { graphic_cmd_pool }
+    }
+}
+
+#[cfg_attr(debug_mode, derive(Debug))]
+struct FrameData {
+    present_semaphore: Arc<Semaphore>,
+    data_semaphore: Arc<Semaphore>,
+    second_data_semaphore: Arc<Semaphore>,
+    render_semaphore: Arc<Semaphore>,
+    data_primary_cmd: Arc<Mutex<CmdBuffer>>,
+    second_data_primary_cmd: Arc<Mutex<CmdBuffer>>,
+    wait_fence: Arc<Fence>,
+    framebuffer: Arc<Framebuffer>,
+    clear_framebuffer: Arc<Framebuffer>,
+}
+
+impl FrameData {
+    fn new(
+        logical_device: Arc<LogicalDevice>,
+        graphic_cmd_pool: Arc<CmdPool>,
+        render_pass: Arc<RenderPass>,
+        clear_render_pass: Arc<RenderPass>,
+        swapchain_view: Arc<ImageView>,
+    ) -> Self {
+        let present_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
+        let data_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
+        let second_data_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
+        let render_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
+        let data_primary_cmd =
+            Arc::new(Mutex::new(CmdBuffer::new_primary(graphic_cmd_pool.clone())));
+        let second_data_primary_cmd =
+            Arc::new(Mutex::new(CmdBuffer::new_primary(graphic_cmd_pool)));
+        let wait_fence = Arc::new(Fence::new_signaled(logical_device));
+        let framebuffer = Arc::new(Framebuffer::new(vec![swapchain_view.clone()], render_pass));
+        let clear_framebuffer = Arc::new(Framebuffer::new(vec![swapchain_view], clear_render_pass));
+        Self {
+            present_semaphore,
+            data_semaphore,
+            second_data_semaphore,
+            render_semaphore,
+            data_primary_cmd,
+            second_data_primary_cmd,
+            wait_fence,
+            framebuffer,
+            clear_framebuffer,
+        }
+    }
+}
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct Engine {
@@ -29,27 +91,20 @@ pub struct Engine {
     physical_device: Arc<PhysicalDevice>,
     logical_device: Arc<LogicalDevice>,
     swapchain: Arc<Swapchain>,
-    present_semaphore: Arc<Semaphore>,
-    data_semaphore: Arc<Semaphore>,
-    second_data_semaphore: Arc<Semaphore>,
-    render_semaphore: Arc<Semaphore>,
     graphic_cmd_pool: Arc<CmdPool>,
-    data_primary_cmds: Vec<Arc<Mutex<CmdBuffer>>>,
-    second_data_primary_cmds: Vec<Arc<Mutex<CmdBuffer>>>,
+    frames_data: Vec<FrameData>,
+    kernels_data: Vec<KernelData>,
     memory_manager: Arc<RwLock<MemoryManager>>,
     buffer_manager: Arc<RwLock<BufferManager>>,
     descriptor_manager: Arc<RwLock<DescriptorManager>>,
     pipeline_manager: Arc<RwLock<PipelineManager>>,
-    wait_fences: Vec<Arc<Fence>>,
-    linear_repeat_sampler: Arc<Sampler>,
-    nearest_repeat_sampler: Arc<Sampler>,
+    sampler_manager: Arc<RwLock<SamplerManager>>,
     //---------------------------------------
     clear_render_pass: Arc<RenderPass>,
-    clear_framebuffers: Vec<Arc<Framebuffer>>,
     render_pass: Arc<RenderPass>,
-    framebuffers: Vec<Arc<Framebuffer>>,
     //---------------------------------------
-    current_frame_number: u32,
+    current_frame_number: usize,
+    frames_count: usize,
 }
 
 impl Engine {
@@ -59,54 +114,38 @@ impl Engine {
         let physical_device = Arc::new(PhysicalDevice::new(&surface));
         let logical_device = Arc::new(LogicalDevice::new(&physical_device, conf.get_render()));
         let swapchain = Arc::new(Swapchain::new(&logical_device));
-        let present_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
-        let data_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
-        let second_data_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
-        let render_semaphore = Arc::new(Semaphore::new(logical_device.clone()));
+        let frames_count = swapchain.get_image_views().len();
         let graphic_cmd_pool = Arc::new(CmdPool::new(
             logical_device.clone(),
             CmdPoolType::Graphic,
             vk::CommandPoolCreateFlags::empty(),
         ));
-        let mut data_primary_cmds = Vec::with_capacity(swapchain.get_image_views().len());
-        let mut second_data_primary_cmds = Vec::with_capacity(swapchain.get_image_views().len());
-        let mut wait_fences = Vec::with_capacity(swapchain.get_image_views().len());
-        for _ in 0..swapchain.get_image_views().len() {
-            data_primary_cmds.push(Arc::new(Mutex::new(CmdBuffer::new_primary(
-                graphic_cmd_pool.clone(),
-            ))));
-            second_data_primary_cmds.push(Arc::new(Mutex::new(CmdBuffer::new_primary(
-                graphic_cmd_pool.clone(),
-            ))));
-            wait_fences.push(Arc::new(Fence::new_signaled(logical_device.clone())));
-        }
         let memory_manager = MemoryManager::new(&logical_device);
         let render_pass = Arc::new(RenderPass::new_with_swapchain(swapchain.clone(), false));
         let clear_render_pass = Arc::new(RenderPass::new_with_swapchain(swapchain.clone(), true));
-        let mut framebuffers = Vec::with_capacity(swapchain.get_image_views().len());
-        let mut clear_framebuffers = Vec::with_capacity(swapchain.get_image_views().len());
+        let mut frames_data = Vec::with_capacity(frames_count);
         for v in swapchain.get_image_views() {
-            framebuffers.push(Arc::new(Framebuffer::new(
-                vec![v.clone()],
+            frames_data.push(FrameData::new(
+                logical_device.clone(),
+                graphic_cmd_pool.clone(),
                 render_pass.clone(),
-            )));
-            clear_framebuffers.push(Arc::new(Framebuffer::new(
-                vec![v.clone()],
                 clear_render_pass.clone(),
-            )));
+                v.clone(),
+            ));
         }
-        let linear_repeat_sampler = Arc::new(Sampler::new(logical_device.clone()));
-        let nearest_repeat_sampler = Arc::new(Sampler::new_with_filter(
-            logical_device.clone(),
-            SamplerFilter::Nearest,
-        ));
+        let kernels_count = num_cpus::get() as usize;
+        let kernels_data = Vec::with_capacity(kernels_count);
+        for _ in 0..kernels_count {
+            kernels_data.push(KernelData::new(logical_device.clone()));
+        }
+        let sampler_manager = Arc::new(RwLock::new(SamplerManager::new(logical_device.clone())));
         let buffer_manager = Arc::new(RwLock::new(BufferManager::new(
             &memory_manager,
             &graphic_cmd_pool,
             32 * 1024 * 1024,
             32 * 1024 * 1024,
             32 * 1024 * 1024,
-            swapchain.get_image_views().len() as isize,
+            frames_count as isize,
         )));
         let descriptor_manager = Arc::new(RwLock::new(DescriptorManager::new(
             &logical_device,
@@ -124,38 +163,37 @@ impl Engine {
             physical_device,
             logical_device,
             swapchain,
-            present_semaphore,
-            data_semaphore,
-            second_data_semaphore,
-            render_semaphore,
             graphic_cmd_pool,
-            data_primary_cmds,
-            second_data_primary_cmds,
+            frames_data,
+            kernels_data,
             memory_manager,
-            render_pass,
-            clear_render_pass,
             descriptor_manager,
             pipeline_manager,
-            framebuffers,
-            clear_framebuffers,
-            current_frame_number: 0,
             buffer_manager,
-            wait_fences,
-            linear_repeat_sampler,
-            nearest_repeat_sampler,
+            sampler_manager,
+            render_pass,
+            clear_render_pass,
+            current_frame_number: 0,
+            frames_count,
         }
     }
 
     pub(crate) fn start_rendering(&mut self) {
-        let current_buffer = match self.swapchain.get_next_image_index(&self.present_semaphore) {
+        self.current_frame_number = match self
+            .swapchain
+            .get_next_image_index(&self.frames_data[self.current_frame_number].present_semaphore)
+        {
             NextImageResult::Next(c) => c,
             NextImageResult::NeedsRefresh => {
                 vxlogf!("Problem with rereshing screen, engine needs refreshing.");
             }
         } as usize;
-        self.wait_fences[current_buffer].wait();
-        self.wait_fences[current_buffer].reset();
-        self.current_frame_number = current_buffer as u32;
+        self.frames_data[self.current_frame_number]
+            .wait_fence
+            .wait();
+        self.frames_data[self.current_frame_number]
+            .wait_fence
+            .reset();
 
         self.clear_copy_data();
 
@@ -163,24 +201,32 @@ impl Engine {
     }
 
     fn clear_copy_data(&self) {
-        let mut pcmd = vxresult!(self.data_primary_cmds[self.current_frame_number as usize].lock());
+        let frame_data = &self.frames_data[self.current_frame_number];
+        let mut pcmd = vxresult!(frame_data.data_primary_cmd.lock());
         pcmd.begin();
-        vxresult!(self.buffer_manager.write())
-            .update(&mut *pcmd, self.current_frame_number as usize);
-        self.clear_framebuffers[self.current_frame_number as usize].begin(&mut *pcmd);
+        vxresult!(self.buffer_manager.write()).update(&mut *pcmd, self.current_frame_number);
+        frame_data.clear_framebuffer.begin(&mut *pcmd);
         pcmd.end_render_pass();
         pcmd.end();
-        self.submit(&self.present_semaphore, &pcmd, &self.data_semaphore);
+        self.submit(
+            &frame_data.present_semaphore,
+            &pcmd,
+            &frame_data.data_semaphore,
+        );
     }
 
     fn secondary_data_preparing(&self) {
-        let mut pcmd =
-            vxresult!(self.second_data_primary_cmds[self.current_frame_number as usize].lock());
+        let frame_data = &self.frames_data[self.current_frame_number];
+        let mut pcmd = vxresult!(frame_data.second_data_primary_cmd.lock());
         pcmd.begin();
         vxresult!(self.buffer_manager.write())
-            .secondary_update(&mut *pcmd, self.current_frame_number as usize);
+            .secondary_update(&mut *pcmd, self.current_frame_number);
         pcmd.end();
-        self.submit(&self.data_semaphore, &pcmd, &self.second_data_semaphore);
+        self.submit(
+            &frame_data.data_semaphore,
+            &pcmd,
+            &frame_data.second_data_semaphore,
+        );
     }
 
     pub(crate) fn submit(&self, wait: &Semaphore, cmd: &CmdBuffer, signal: &Semaphore) {
@@ -245,18 +291,21 @@ impl Engine {
     }
 
     pub(crate) fn end(&self, wait: &Semaphore) {
+        let frame_data = &self.frames_data[self.current_frame_number];
         self.submit_with_fence(
             &[*wait.get_data()],
             &[],
-            &[*self.render_semaphore.get_data()],
-            Some(&self.wait_fences[self.current_frame_number as usize]),
+            &[*frame_data.render_semaphore.get_data()],
+            Some(&frame_data.wait_fence),
         );
+
+        let current_frame_number = self.current_frame_number as u32;
 
         let mut present_info = vk::PresentInfoKHR::default();
         present_info.swapchain_count = 1;
         present_info.p_swapchains = self.swapchain.get_data();
-        present_info.p_image_indices = &self.current_frame_number;
-        present_info.p_wait_semaphores = self.render_semaphore.get_data();
+        present_info.p_image_indices = &current_frame_number;
+        present_info.p_wait_semaphores = frame_data.render_semaphore.get_data();
         present_info.wait_semaphore_count = 1;
         vxresult!(unsafe {
             self.swapchain
@@ -305,12 +354,12 @@ impl Engine {
         ));
     }
 
-    pub(crate) fn create_secondary_command_buffer(&self, cmd_pool: Arc<CmdPool>) -> CmdBuffer {
-        return CmdBuffer::new_secondary(cmd_pool);
+    pub(crate) fn create_secondary_command_buffer(&self, kernel_index: usize) -> CmdBuffer {
+        return CmdBuffer::new_secondary(self.kernels_data[kernel_index].graphic_cmd_pool.clone());
     }
 
-    pub(crate) fn create_primary_command_buffer(&self, cmd_pool: Arc<CmdPool>) -> CmdBuffer {
-        return CmdBuffer::new_primary(cmd_pool);
+    pub(crate) fn create_primary_command_buffer(&self, kernel_index: usize) -> CmdBuffer {
+        return CmdBuffer::new_primary(self.kernels_data[kernel_index].graphic_cmd_pool.clone());
     }
 
     pub(crate) fn create_primary_command_buffer_from_main_graphic_pool(&self) -> CmdBuffer {
@@ -325,20 +374,24 @@ impl Engine {
         return Semaphore::new(self.logical_device.clone());
     }
 
+    pub(crate) fn get_kernels_count(&self) -> usize {
+        return self.kernels_data.len();
+    }
+
     pub(crate) fn get_frames_count(&self) -> usize {
-        return self.framebuffers.len();
+        return self.frames_data.len();
     }
 
     pub(crate) fn get_frame_number(&self) -> usize {
-        return self.current_frame_number as usize;
+        return self.current_frame_number;
     }
 
     pub(crate) fn get_current_framebuffer(&self) -> &Arc<Framebuffer> {
-        return &self.framebuffers[self.current_frame_number as usize];
+        return &self.frames_data[self.current_frame_number].framebuffer;
     }
 
     pub(crate) fn get_starting_semaphore(&self) -> &Arc<Semaphore> {
-        return &self.second_data_semaphore;
+        return &self.frames_data[self.current_frame_number].second_data_semaphore;
     }
 
     pub(crate) fn get_device(&self) -> &Arc<LogicalDevice> {
@@ -361,20 +414,12 @@ impl Engine {
         return &self.pipeline_manager;
     }
 
-    pub(crate) fn get_linear_repeat_sampler(&self) -> &Arc<Sampler> {
-        return &self.linear_repeat_sampler;
-    }
-
-    pub(crate) fn get_nearest_repeat_sampler(&self) -> &Arc<Sampler> {
-        return &self.nearest_repeat_sampler;
+    pub(crate) fn get_sampler_manager(&self) -> &Arc<RwLock<SamplerManager>> {
+        return &self.sampler_manager;
     }
 
     pub(crate) fn get_render_pass(&self) -> &Arc<RenderPass> {
         return &self.render_pass;
-    }
-
-    pub(crate) fn get_framebuffers(&self) -> &Vec<Arc<Framebuffer>> {
-        return &self.framebuffers;
     }
 }
 
