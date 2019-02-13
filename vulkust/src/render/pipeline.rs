@@ -12,22 +12,25 @@ pub(crate) use super::super::vulkan::pipeline::*;
 #[cfg_attr(debug_mode, derive(Debug))]
 pub enum PipelineType {
     /// For deferred base PBR
-    DeferredPBR,
-    /// For providing g-buffer for DeferredPBR
+    DeferredPbr,
+    /// For providing g-buffer for DeferredPbr
     GBufferFiller,
-    /// For forward rendering of a single light with shadow map.
+    /// For forward-pbr rendering of one light with shadow map.
     /// The result of this can be accumulated for more call of other forward based PBRs
-    ForwardSingleLightShadowPBR,
-    /// This is like ForwardSingleLightShadowPBR but instead of a light and
-    /// its corresponding shadow, this only has array of lights
-    ForwardPBR,
-    /// This is like ForwardSingleLightShadowPBR but instead of a light and
-    /// its corresponding shadow, this only has an environment, and ambient light
-    ForwardEnvironmentalPBR,
+    ForwardPbrOneLightShadow,
+    /// This is like ForwardPbrOneLightShadow but in addition to
+    /// one light and its corresponding shadow-map, this has
+    /// array of lights (do not cast shadow)
+    /// and an environment
+    /// and ambient light
+    /// and a single
+    ForwardPbr,
+    GamaCorrectness,
     ShadowAccumulatorDirectional,
     ShadowAccumulatorPoint,
     ShadowAccumulatorCone,
     ShadowMapper,
+    LightBlooming,
     SSAO,
     SSR,
     Unlit,

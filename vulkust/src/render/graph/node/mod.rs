@@ -31,13 +31,31 @@ use std::sync::{Arc, RwLock, Weak};
 pub type LinkId = Id;
 
 const POSITION: LinkId = 1;
+const POSITION_NAME: &'static str = "position";
+
 const NORMAL: LinkId = 2;
+const NORMAL_NAME: &'static str = "normal";
+
 const TANGENT: LinkId = 3;
+const TANGENT_NAME: &'static str = "tangent";
+
 const BITANGENT: LinkId = 4;
+const BITANGENT_NAME: &'static str = "bitangent";
+
 const DEPTH: LinkId = 5;
+const DEPTH_NAME: &'static str = "depth";
+
 const OCCLUSION: LinkId = 6;
+const OCCLUSION_NAME: &'static str = "occlusion";
+
 const SINGLE_INPUT: LinkId = 7;
+const SINGLE_INPUT_NAME: &'static str = "single-input";
+
 const SINGLE_OUTPUT: LinkId = 8;
+const SINGLE_OUTPUT_NAME: &'static str = "single-output";
+
+const ALBEDO: LinkId = 9;
+const ALBEDO_NAME: &'static str = "albedo";
 
 pub trait Node: CoreDebug {
     fn get_name(&self) -> &str;
@@ -84,3 +102,5 @@ pub trait Node: CoreDebug {
         self.get_output_texture(vxunwrap!(self.get_output_link_index_by_id(id)))
     }
 }
+
+pub struct Base 

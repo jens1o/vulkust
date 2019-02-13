@@ -12,8 +12,18 @@ use super::super::super::texture::{Manager as TextureManager, Texture};
 use super::{Node, LinkId};
 use std::sync::{Arc, Mutex, RwLock};
 
-const LINKS_NAMES: [&'static str; 1] = [
-    "position"
+const LINKS_NAMES: [&'static str; 4] = [
+    super::POSITION_NAME,
+    super::NORMAL_NAME,
+    super::ALBEDO_NAME,
+    super::DEPTH_NAME,
+];
+
+const LINKS_IDS: [LinkId; 4] = [
+    super::POSITION,
+    super::NORMAL,
+    super::ALBEDO,
+    super::DEPTH,
 ];
 
 #[cfg_attr(debug_mode, derive(Debug))]
@@ -185,12 +195,36 @@ impl Node for GBufferFiller {
     }
 
     fn get_output_links_names(&self) -> &[&str] {
-        &[]
+        &LINKS_NAMES
     }
-    fn get_output_links_ids(&self) -> &[LinkId];
-    fn get_output_link_index_by_name(&self, &str) -> Option<usize>;
-    fn get_output_link_index_by_id(&self, LinkId) -> Option<usize>;
-    fn get_link_consumers(&self, usize) -> &[Weak<RwLock<Node>>];
+
+    fn get_output_links_ids(&self) -> &[LinkId] {
+        &LINKS_IDS
+    }
+
+    fn get_output_link_index_by_name(&self, name: &str) -> Option<usize> {
+        let mut i = 0;
+        for n in &LINKS_NAMES {
+            if *n == name {
+                return Some(i);
+            }
+            i += 1;
+        } 
+        None
+    }
+
+    fn get_output_link_index_by_id(&self, id: LinkId) -> Option<usize> {
+        let mut i = 0;
+        for l in &LINKS_IDS {
+            if *l == id {
+                return Some(i);
+            }
+            i += 1;
+        } 
+        None
+    }
+
+    fn get_link_consumers(&self, index: usize) -> &[Weak<RwLock<Node>>];
     fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>];
     fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
     fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
