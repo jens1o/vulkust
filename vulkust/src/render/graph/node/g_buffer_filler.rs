@@ -9,7 +9,12 @@ use super::super::super::render_pass::RenderPass;
 use super::super::super::sampler::Filter;
 use super::super::super::sync::Semaphore;
 use super::super::super::texture::{Manager as TextureManager, Texture};
+use super::{Node, LinkId};
 use std::sync::{Arc, Mutex, RwLock};
+
+const LINKS_NAMES: [&'static str; 1] = [
+    "position"
+];
 
 #[cfg_attr(debug_mode, derive(Debug))]
 struct KernelData {
@@ -56,7 +61,7 @@ struct SharedData {
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct GBufferFiller {
     shared_data: SharedData,
-    frame_data: Vec<FrameData>,
+    frames_data: Vec<FrameData>,
 }
 
 impl GBufferFiller {
@@ -104,14 +109,23 @@ impl GBufferFiller {
         let framebuffer = Arc::new(Framebuffer::new(buffers, render_pass.clone()));
         let pipeline = vxresult!(geng.get_pipeline_manager().write()).create(
             render_pass.clone(),
-            PipelineType::GBuffer,
+            PipelineType::GBufferFiller,
             eng.get_config(),
         );
-        Self {
+        let shared_data = SharedData {
             textures,
             render_pass,
             framebuffer,
             pipeline,
+        };
+        let frames_count = geng.get_frames_count();
+        let mut frames_data = Vec::with_capacity(frames_count);
+        for _ in 0..frames_count {
+            frames_data.push(FrameData::new(&geng));
+        }
+        Self {
+            shared_data,
+            frames_data,
         }
     }
 
@@ -148,3 +162,42 @@ impl GBufferFiller {
 unsafe impl Send for GBufferFiller {}
 
 unsafe impl Sync for GBufferFiller {}
+
+impl Node for GBufferFiller {
+    fn get_name(&self) -> &str {
+        "G-Buffer-Filler"
+    }
+
+    fn get_input_links_names(&self) -> &[&str] {
+        &[]
+    }
+
+    fn get_input_links_ids(&self) -> &[LinkId] { 
+        &[]
+    }
+
+    fn get_input_link_index_by_name(&self, _: &str) -> Option<usize> {
+        vxunexpected!();
+    }
+
+    fn get_input_link_index_by_id(&self, _: LinkId) -> Option<usize> {
+        vxunexpected!();
+    }
+
+    fn get_output_links_names(&self) -> &[&str] {
+        &[]
+    }
+    fn get_output_links_ids(&self) -> &[LinkId];
+    fn get_output_link_index_by_name(&self, &str) -> Option<usize>;
+    fn get_output_link_index_by_id(&self, LinkId) -> Option<usize>;
+    fn get_link_consumers(&self, usize) -> &[Weak<RwLock<Node>>];
+    fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>];
+    fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
+    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
+    fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
+    fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
+    fn create_new(&self) -> Arc<RwLock<Node>>;
+    fn get_output_texture(&self, usize) -> Arc<RwLock<Texture>>;
+    fn record(&self, kernel_index: usize, &Scene, &Engine);
+    fn submit(&self, &Engine);
+}

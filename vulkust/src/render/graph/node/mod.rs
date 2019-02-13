@@ -5,6 +5,10 @@ pub mod ssao;
 pub mod ssr;
 
 use super::super::super::core::debug::Debug as CoreDebug;
+use super::super::super::core::types::Id;
+use super::super::engine::Engine;
+use super::super::scene::Scene;
+use super::super::texture::Texture;
 use std::sync::{Arc, RwLock, Weak};
 
 /// Node is reponsible to record command buffers.
@@ -24,14 +28,16 @@ use std::sync::{Arc, RwLock, Weak};
 /// This system can be used to push independant commands on separate queue
 /// It must create a new
 
-#[cfg_attr(debug_mode, derive(Debug))]
-pub enum LinkId {
-    Position,
-    Normal,
-    Tangent,
-    Bitangent,
-    Depth,
-}
+pub type LinkId = Id;
+
+const POSITION: LinkId = 1;
+const NORMAL: LinkId = 2;
+const TANGENT: LinkId = 3;
+const BITANGENT: LinkId = 4;
+const DEPTH: LinkId = 5;
+const OCCLUSION: LinkId = 6;
+const SINGLE_INPUT: LinkId = 7;
+const SINGLE_OUTPUT: LinkId = 8;
 
 pub trait Node: CoreDebug {
     fn get_name(&self) -> &str;
@@ -43,9 +49,16 @@ pub trait Node: CoreDebug {
     fn get_output_links_ids(&self) -> &[LinkId];
     fn get_output_link_index_by_name(&self, &str) -> Option<usize>;
     fn get_output_link_index_by_id(&self, LinkId) -> Option<usize>;
-
     fn get_link_consumers(&self, usize) -> &[Weak<RwLock<Node>>];
     fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>];
+    fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
+    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
+    fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
+    fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
+    fn create_new(&self) -> Arc<RwLock<Node>>;
+    fn get_output_texture(&self, usize) -> Arc<RwLock<Texture>>;
+    fn record(&self, kernel_index: usize, &Scene, &Engine);
+    fn submit(&self, &Engine);
 
     fn register_consumer_for_link_by_name(&mut self, name: &str, o: Weak<RwLock<Node>>) {
         self.register_consumer_for_link(vxunwrap!(self.get_output_link_index_by_name(name)), o);
@@ -55,11 +68,6 @@ pub trait Node: CoreDebug {
         self.register_consumer_for_link(vxunwrap!(self.get_output_link_index_by_id(id)), o);
     }
 
-    fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
-
-    fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
-    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
-
     fn register_provider_for_link_by_name(&mut self, name: &str, o: Arc<RwLock<Node>>) {
         self.register_provider_for_link(vxunwrap!(self.get_input_link_index_by_name(name)), o);
     }
@@ -68,7 +76,11 @@ pub trait Node: CoreDebug {
         self.register_provider_for_link(vxunwrap!(self.get_input_link_index_by_id(id)), o);
     }
 
-    fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
+    fn get_output_texture_by_name(&mut self, name: &str) -> Arc<RwLock<Texture>> {
+        self.get_output_texture(vxunwrap!(self.get_output_link_index_by_name(name)))
+    }
 
-    fn create_new(&self) -> Arc<RwLock<Node>>;
+    fn get_output_texture_by_id(&mut self, id: LinkId) -> Arc<RwLock<Texture>> {
+        self.get_output_texture(vxunwrap!(self.get_output_link_index_by_id(id)))
+    }
 }
