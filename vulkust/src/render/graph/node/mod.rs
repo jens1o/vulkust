@@ -9,6 +9,7 @@ use super::super::super::core::types::Id;
 use super::super::engine::Engine;
 use super::super::scene::Scene;
 use super::super::texture::Texture;
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, Weak};
 
 /// Node is reponsible to record command buffers.
@@ -58,19 +59,7 @@ const ALBEDO: LinkId = 9;
 const ALBEDO_NAME: &'static str = "albedo";
 
 pub trait Node: CoreDebug {
-    fn get_name(&self) -> &str;
-    fn get_input_links_names(&self) -> &[&str];
-    fn get_input_links_ids(&self) -> &[LinkId];
-    fn get_input_link_index_by_name(&self, &str) -> Option<usize>;
-    fn get_input_link_index_by_id(&self, LinkId) -> Option<usize>;
-    fn get_output_links_names(&self) -> &[&str];
-    fn get_output_links_ids(&self) -> &[LinkId];
-    fn get_output_link_index_by_name(&self, &str) -> Option<usize>;
-    fn get_output_link_index_by_id(&self, LinkId) -> Option<usize>;
-    fn get_link_consumers(&self, usize) -> &[Weak<RwLock<Node>>];
-    fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>];
-    fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
-    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
+    fn get_base(&self) -> &Base;
     fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
     fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
     fn create_new(&self) -> Arc<RwLock<Node>>;
@@ -79,28 +68,225 @@ pub trait Node: CoreDebug {
     fn submit(&self, &Engine);
 
     fn register_consumer_for_link_by_name(&mut self, name: &str, o: Weak<RwLock<Node>>) {
-        self.register_consumer_for_link(vxunwrap!(self.get_output_link_index_by_name(name)), o);
+        self.register_consumer_for_link(
+            vxunwrap!(self.get_base().get_output_link_index_by_name(name)),
+            o,
+        );
     }
 
     fn register_consumer_for_link_by_id(&mut self, id: LinkId, o: Weak<RwLock<Node>>) {
-        self.register_consumer_for_link(vxunwrap!(self.get_output_link_index_by_id(id)), o);
+        self.register_consumer_for_link(
+            vxunwrap!(self.get_base().get_output_link_index_by_id(id)),
+            o,
+        );
     }
 
     fn register_provider_for_link_by_name(&mut self, name: &str, o: Arc<RwLock<Node>>) {
-        self.register_provider_for_link(vxunwrap!(self.get_input_link_index_by_name(name)), o);
+        self.register_provider_for_link(
+            vxunwrap!(self.get_base().get_input_link_index_by_name(name)),
+            o,
+        );
     }
 
     fn register_provider_for_link_by_id(&mut self, id: LinkId, o: Arc<RwLock<Node>>) {
-        self.register_provider_for_link(vxunwrap!(self.get_input_link_index_by_id(id)), o);
+        self.register_provider_for_link(
+            vxunwrap!(self.get_base().get_input_link_index_by_id(id)),
+            o,
+        );
     }
 
     fn get_output_texture_by_name(&mut self, name: &str) -> Arc<RwLock<Texture>> {
-        self.get_output_texture(vxunwrap!(self.get_output_link_index_by_name(name)))
+        self.get_output_texture(vxunwrap!(self
+            .get_base()
+            .get_output_link_index_by_name(name)))
     }
 
     fn get_output_texture_by_id(&mut self, id: LinkId) -> Arc<RwLock<Texture>> {
-        self.get_output_texture(vxunwrap!(self.get_output_link_index_by_id(id)))
+        self.get_output_texture(vxunwrap!(self.get_base().get_output_link_index_by_id(id)))
+    }
+
+    fn get_name(&self) -> &str {
+        self.get_base().get_name()
+    }
+
+    fn get_input_links_names(&self) -> &[String] {
+        self.get_base().get_input_links_names()
+    }
+
+    fn get_input_links_ids(&self) -> &[LinkId] {
+        self.get_base().get_input_links_ids()
+    }
+
+    fn get_input_link_index_by_name(&self, name: &str) -> Option<usize> {
+        self.get_base().get_input_link_index_by_name(name)
+    }
+
+    fn get_input_link_index_by_id(&self, id: LinkId) -> Option<usize> {
+        self.get_base().get_input_link_index_by_id(id)
+    }
+
+    fn get_output_links_names(&self) -> &[String] {
+        self.get_base().get_output_links_names()
+    }
+
+    fn get_output_links_ids(&self) -> &[LinkId] {
+        self.get_base().get_output_links_ids()
+    }
+
+    fn get_output_link_index_by_name(&self, name: &str) -> Option<usize> {
+        self.get_base().get_output_link_index_by_name(name)
+    }
+
+    fn get_output_link_index_by_id(&self, id: LinkId) -> Option<usize> {
+        self.get_base().get_output_link_index_by_id(id)
+    }
+
+    fn get_link_consumers(&self, index: usize) -> &[Weak<RwLock<Node>>] {
+        self.get_base().get_link_consumers(index)
+    }
+
+    fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>] {
+        self.get_base().get_all_consumers()
+    }
+
+    fn get_link_provider(&self, index: usize) -> &Arc<RwLock<Node>> {
+        self.get_base().get_link_provider(index)
+    }
+
+    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>] {
+        self.get_base().get_all_providers()
     }
 }
 
-pub struct Base 
+#[cfg_attr(debug_mode, derive(Debug))]
+pub struct Base {
+    input_links_id_index: BTreeMap<LinkId, usize>,
+    input_links_name_index: BTreeMap<String, usize>,
+    output_links_id_index: BTreeMap<LinkId, usize>,
+    output_links_name_index: BTreeMap<String, usize>,
+    name: String,
+    input_links_ids: Vec<LinkId>,
+    input_links_names: Vec<String>,
+    output_links_ids: Vec<LinkId>,
+    output_links_names: Vec<String>,
+    providers: Vec<Arc<RwLock<Node>>>,
+    consumers: Vec<Vec<Weak<RwLock<Node>>>>,
+}
+
+impl Base {
+    pub fn new(
+        name: String,
+        input_links_names: Vec<String>,
+        input_links_ids: Vec<LinkId>,
+        output_links_names: Vec<String>,
+        output_links_ids: Vec<LinkId>,
+    ) -> Self {
+        let mut input_links_id_index = BTreeMap::new();
+        let mut input_links_name_index = BTreeMap::new();
+        let mut output_links_id_index = BTreeMap::new();
+        let mut output_links_name_index = BTreeMap::new();
+        for i in 0..input_links_ids.len() {
+            input_links_id_index.insert(input_links_ids[i], i);
+            input_links_name_index.insert(input_links_names[i], i);
+        }
+        for i in 0..output_links_ids.len() {
+            output_links_id_index.insert(output_links_ids[i], i);
+            output_links_name_index.insert(output_links_names[i], i);
+        }
+        let providers = Vec::new();
+        let consumers = Vec::new();
+        Self {
+            name,
+            input_links_names,
+            input_links_ids,
+            output_links_names,
+            output_links_ids,
+            input_links_id_index,
+            input_links_name_index,
+            output_links_id_index,
+            output_links_name_index,
+            providers,
+            consumers,
+        }
+    }
+
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn get_input_links_names(&self) -> &[String] {
+        &self.input_links_names
+    }
+
+    pub fn get_input_links_ids(&self) -> &[LinkId] {
+        &self.input_links_ids
+    }
+
+    pub fn get_input_link_index_by_name(&self, name: &str) -> Option<usize> {
+        let mut i = 0;
+        for l in &self.input_links_names {
+            if name == l {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    pub fn get_input_link_index_by_id(&self, id: LinkId) -> Option<usize> {
+        let mut i = 0;
+        for l in &self.input_links_ids {
+            if id == *l {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    pub fn get_output_links_names(&self) -> &[String] {
+        &self.output_links_names
+    }
+
+    pub fn get_output_links_ids(&self) -> &[LinkId] {
+        &self.output_links_ids
+    }
+
+    pub fn get_output_link_index_by_name(&self, name: &str) -> Option<usize> {
+        let mut i = 0;
+        for l in &self.output_links_names {
+            if name == l {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    pub fn get_output_link_index_by_id(&self, id: LinkId) -> Option<usize> {
+        let mut i = 0;
+        for l in &self.output_links_ids {
+            if id == *l {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    pub fn get_link_consumers(&self, index: usize) -> &[Weak<RwLock<Node>>] {
+        &self.consumers[index]
+    }
+
+    pub fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>] {
+        &self.consumers
+    }
+
+    pub fn get_link_provider(&self, index: usize) -> &Arc<RwLock<Node>> {
+        &self.providers[index]
+    }
+
+    pub fn get_all_providers(&self) -> &[Arc<RwLock<Node>>] {
+        &self.providers
+    }
+}
