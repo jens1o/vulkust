@@ -5,10 +5,10 @@ use std::fmt::Debug as StdDebug;
 pub trait Debug: StdDebug {}
 
 #[cfg(debug_mode)]
-impl<T> Debug for T where T: StdDebug {}
+impl<T> Debug for T where T: ?Sized + StdDebug {}
 
 #[cfg(not(debug_mode))]
 pub trait Debug {}
 
 #[cfg(not(debug_mode))]
-impl<T> Debug for T {}
+impl<T> Debug for T where T: ?Sized {}

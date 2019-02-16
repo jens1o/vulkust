@@ -1,5 +1,6 @@
+use super::super::super::super::core::types::Real;
+use super::super::super::camera::Camera;
 use super::super::super::command::Buffer as CmdBuffer;
-use super::super::super::config::Configurations;
 use super::super::super::engine::Engine;
 use super::super::super::framebuffer::Framebuffer;
 use super::super::super::gapi::GraphicApiEngine;
@@ -7,8 +8,9 @@ use super::super::super::image::{AttachmentType, Format, View as ImageView};
 use super::super::super::pipeline::{Pipeline, PipelineType};
 use super::super::super::render_pass::RenderPass;
 use super::super::super::sampler::Filter;
+use super::super::super::scene::Scene;
 use super::super::super::sync::Semaphore;
-use super::super::super::texture::{Manager as TextureManager, Texture};
+use super::super::super::texture::Texture;
 use super::{Base, LinkId, Node};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -26,7 +28,6 @@ struct KernelData {
     sec_cmd: CmdBuffer,
 }
 
-/// This struct is gonna be created for each instance
 #[cfg_attr(debug_mode, derive(Debug))]
 struct FrameData {
     pri_cmd: CmdBuffer,
@@ -166,6 +167,18 @@ impl GBufferFiller {
             base,
             render_data,
         }
+    }
+
+    pub fn get_viewport(&mut self, _x: Real, _y: Real, _width: Real, _height: Real) {
+        vxunimplemented!();
+    }
+
+    pub fn record(&mut self, _kernel_idex: usize, _camera: &Camera, _scene: &Scene) {
+        vxunimplemented!();
+    }
+
+    pub fn submit(&self, _geng: &GraphicApiEngine) {
+        vxunimplemented!();
     }
 
     // pub(super) fn begin_secondary(&self, cmd: &mut CmdBuffer) {

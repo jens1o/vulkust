@@ -74,19 +74,13 @@ where
 }
 
 #[cfg_attr(debug_mode, derive(Debug))]
-pub struct WeakStorage<T>
-where
-    T: Debug + ?Sized,
-{
+pub struct WeakStorage<T: ?Sized + Debug> {
     data: Vec<Weak<T>>,
     id_index: BTreeMap<Id, usize>,
     name_index: BTreeMap<String, usize>,
 }
 
-impl<T> WeakStorage<T>
-where
-    T: Debug + ?Sized,
-{
+impl<T: ?Sized + Debug> WeakStorage<T> {
     pub fn new() -> Self {
         Self {
             data: Vec::new(),

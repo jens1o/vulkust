@@ -1,4 +1,5 @@
 pub mod g_buffer_filler;
+pub mod manager;
 pub mod shadow_accumulator;
 pub mod shadow_mapper;
 pub mod ssao;
