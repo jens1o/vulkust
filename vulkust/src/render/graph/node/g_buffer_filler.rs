@@ -9,22 +9,17 @@ use super::super::super::render_pass::RenderPass;
 use super::super::super::sampler::Filter;
 use super::super::super::sync::Semaphore;
 use super::super::super::texture::{Manager as TextureManager, Texture};
-use super::{Node, LinkId};
+use super::{Base, LinkId, Node};
 use std::sync::{Arc, Mutex, RwLock};
 
-const LINKS_NAMES: [&'static str; 4] = [
+const LINKS_NAMES: [&str; 4] = [
     super::POSITION_NAME,
     super::NORMAL_NAME,
     super::ALBEDO_NAME,
     super::DEPTH_NAME,
 ];
 
-const LINKS_IDS: [LinkId; 4] = [
-    super::POSITION,
-    super::NORMAL,
-    super::ALBEDO,
-    super::DEPTH,
-];
+const LINKS_IDS: [LinkId; 4] = [super::POSITION, super::NORMAL, super::ALBEDO, super::DEPTH];
 
 #[cfg_attr(debug_mode, derive(Debug))]
 struct KernelData {
@@ -60,6 +55,23 @@ impl FrameData {
 
 /// This struct is gonna be created for each instance
 #[cfg_attr(debug_mode, derive(Debug))]
+struct RenderData {
+    frames_data: Vec<FrameData>,
+}
+
+impl RenderData {
+    fn new(geng: &GraphicApiEngine) -> Self {
+        let frames_count = geng.get_frames_count();
+        let mut frames_data = Vec::with_capacity(frames_count);
+        for _ in 0..frames_count {
+            frames_data.push(FrameData::new(geng));
+        }
+        Self { frames_data }
+    }
+}
+
+/// This struct is gonna be created for each instance
+#[cfg_attr(debug_mode, derive(Debug))]
 #[derive(Clone)]
 struct SharedData {
     textures: Vec<Arc<RwLock<Texture>>>,
@@ -70,8 +82,9 @@ struct SharedData {
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct GBufferFiller {
+    base: Base,
     shared_data: SharedData,
-    frames_data: Vec<FrameData>,
+    render_data: RenderData,
 }
 
 impl GBufferFiller {
@@ -128,45 +141,41 @@ impl GBufferFiller {
             framebuffer,
             pipeline,
         };
-        let frames_count = geng.get_frames_count();
-        let mut frames_data = Vec::with_capacity(frames_count);
-        for _ in 0..frames_count {
-            frames_data.push(FrameData::new(&geng));
-        }
+        let render_data = RenderData::new(&*geng);
+        let base = Base::new(
+            "g-buffer-filler".to_string(),
+            Vec::new(),
+            Vec::new(),
+            {
+                let mut names = Vec::with_capacity(LINKS_NAMES.len());
+                for l in &LINKS_NAMES {
+                    names.push(l.to_string());
+                }
+                names
+            },
+            {
+                let mut ids = Vec::with_capacity(LINKS_IDS.len());
+                for l in &LINKS_IDS {
+                    ids.push(*l);
+                }
+                ids
+            },
+        );
         Self {
             shared_data,
-            frames_data,
+            base,
+            render_data,
         }
     }
 
-    pub(super) fn begin_secondary(&self, cmd: &mut CmdBuffer) {
-        cmd.begin_secondary(&self.framebuffer);
-        cmd.bind_pipeline(&self.pipeline);
-    }
+    // pub(super) fn begin_secondary(&self, cmd: &mut CmdBuffer) {
+    //     cmd.begin_secondary(&self.framebuffer);
+    //     cmd.bind_pipeline(&self.pipeline);
+    // }
 
-    pub(super) fn begin_primary(&self, cmd: &mut CmdBuffer) {
-        self.framebuffer.begin(cmd);
-    }
-
-    pub(super) fn get_textures(&self) -> &Vec<Arc<RwLock<Texture>>> {
-        return &self.textures;
-    }
-
-    pub(super) fn get_normal_texture(&self) -> &Arc<RwLock<Texture>> {
-        return &self.textures[1];
-    }
-
-    pub(super) fn get_position_texture(&self) -> &Arc<RwLock<Texture>> {
-        return &self.textures[0];
-    }
-
-    pub(super) fn get_depth_texture(&self) -> &Arc<RwLock<Texture>> {
-        return &self.textures[3];
-    }
-
-    pub(super) fn get_framebuffer(&self) -> &Framebuffer {
-        return &self.framebuffer;
-    }
+    // pub(super) fn begin_primary(&self, cmd: &mut CmdBuffer) {
+    //     self.framebuffer.begin(cmd);
+    // }
 }
 
 unsafe impl Send for GBufferFiller {}
@@ -174,64 +183,23 @@ unsafe impl Send for GBufferFiller {}
 unsafe impl Sync for GBufferFiller {}
 
 impl Node for GBufferFiller {
-    fn get_name(&self) -> &str {
-        "G-Buffer-Filler"
+    fn get_base(&self) -> &Base {
+        &self.base
     }
 
-    fn get_input_links_names(&self) -> &[&str] {
-        &[]
+    fn get_mut_base(&mut self) -> &mut Base {
+        &mut self.base
     }
 
-    fn get_input_links_ids(&self) -> &[LinkId] { 
-        &[]
+    fn create_new(&self, geng: &GraphicApiEngine) -> Arc<RwLock<Node>> {
+        Arc::new(RwLock::new(Self {
+            base: self.base.create_new(),
+            shared_data: self.shared_data.clone(),
+            render_data: RenderData::new(geng),
+        }))
     }
 
-    fn get_input_link_index_by_name(&self, _: &str) -> Option<usize> {
-        vxunexpected!();
+    fn get_output_texture(&self, index: usize) -> &Arc<RwLock<Texture>> {
+        &self.shared_data.textures[index]
     }
-
-    fn get_input_link_index_by_id(&self, _: LinkId) -> Option<usize> {
-        vxunexpected!();
-    }
-
-    fn get_output_links_names(&self) -> &[&str] {
-        &LINKS_NAMES
-    }
-
-    fn get_output_links_ids(&self) -> &[LinkId] {
-        &LINKS_IDS
-    }
-
-    fn get_output_link_index_by_name(&self, name: &str) -> Option<usize> {
-        let mut i = 0;
-        for n in &LINKS_NAMES {
-            if *n == name {
-                return Some(i);
-            }
-            i += 1;
-        } 
-        None
-    }
-
-    fn get_output_link_index_by_id(&self, id: LinkId) -> Option<usize> {
-        let mut i = 0;
-        for l in &LINKS_IDS {
-            if *l == id {
-                return Some(i);
-            }
-            i += 1;
-        } 
-        None
-    }
-
-    fn get_link_consumers(&self, index: usize) -> &[Weak<RwLock<Node>>];
-    fn get_all_consumers(&self) -> &[Vec<Weak<RwLock<Node>>>];
-    fn get_link_provider(&self, usize) -> &Arc<RwLock<Node>>;
-    fn get_all_providers(&self) -> &[Arc<RwLock<Node>>];
-    fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
-    fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
-    fn create_new(&self) -> Arc<RwLock<Node>>;
-    fn get_output_texture(&self, usize) -> Arc<RwLock<Texture>>;
-    fn record(&self, kernel_index: usize, &Scene, &Engine);
-    fn submit(&self, &Engine);
 }

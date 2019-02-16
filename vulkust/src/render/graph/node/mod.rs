@@ -7,6 +7,7 @@ pub mod ssr;
 use super::super::super::core::debug::Debug as CoreDebug;
 use super::super::super::core::types::Id;
 use super::super::engine::Engine;
+use super::super::gapi::GraphicApiEngine;
 use super::super::scene::Scene;
 use super::super::texture::Texture;
 use std::collections::BTreeMap;
@@ -59,13 +60,25 @@ const ALBEDO: LinkId = 9;
 const ALBEDO_NAME: &'static str = "albedo";
 
 pub trait Node: CoreDebug {
-    fn get_base(&self) -> &Base;
-    fn register_consumer_for_link(&mut self, usize, Weak<RwLock<Node>>);
-    fn register_provider_for_link(&mut self, usize, Arc<RwLock<Node>>);
-    fn create_new(&self) -> Arc<RwLock<Node>>;
-    fn get_output_texture(&self, usize) -> Arc<RwLock<Texture>>;
-    fn record(&self, kernel_index: usize, &Scene, &Engine);
-    fn submit(&self, &Engine);
+    /// Implementor of trait either can provide this methode or it must implement all other default implementations
+    fn get_base(&self) -> &Base {
+        vxunexpected!();
+    }
+
+    fn get_mut_base(&mut self) -> &mut Base {
+        vxunexpected!();
+    }
+
+    fn create_new(&self, geng: &GraphicApiEngine) -> Arc<RwLock<Node>>;
+    fn get_output_texture(&self, usize) -> &Arc<RwLock<Texture>>;
+
+    fn register_consumer_for_link(&mut self, index: usize, c: Weak<RwLock<Node>>) {
+        self.get_mut_base().register_consumer_for_link(index, c);
+    }
+
+    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>) {
+        self.get_mut_base().register_provider_for_link(index, p);
+    }
 
     fn register_consumer_for_link_by_name(&mut self, name: &str, o: Weak<RwLock<Node>>) {
         self.register_consumer_for_link(
@@ -95,13 +108,13 @@ pub trait Node: CoreDebug {
         );
     }
 
-    fn get_output_texture_by_name(&mut self, name: &str) -> Arc<RwLock<Texture>> {
+    fn get_output_texture_by_name(&mut self, name: &str) -> &Arc<RwLock<Texture>> {
         self.get_output_texture(vxunwrap!(self
             .get_base()
             .get_output_link_index_by_name(name)))
     }
 
-    fn get_output_texture_by_id(&mut self, id: LinkId) -> Arc<RwLock<Texture>> {
+    fn get_output_texture_by_id(&mut self, id: LinkId) -> &Arc<RwLock<Texture>> {
         self.get_output_texture(vxunwrap!(self.get_base().get_output_link_index_by_id(id)))
     }
 
@@ -160,17 +173,17 @@ pub trait Node: CoreDebug {
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct Base {
-    input_links_id_index: BTreeMap<LinkId, usize>,
-    input_links_name_index: BTreeMap<String, usize>,
-    output_links_id_index: BTreeMap<LinkId, usize>,
-    output_links_name_index: BTreeMap<String, usize>,
-    name: String,
-    input_links_ids: Vec<LinkId>,
-    input_links_names: Vec<String>,
-    output_links_ids: Vec<LinkId>,
-    output_links_names: Vec<String>,
-    providers: Vec<Arc<RwLock<Node>>>,
-    consumers: Vec<Vec<Weak<RwLock<Node>>>>,
+    pub input_links_id_index: BTreeMap<LinkId, usize>,
+    pub input_links_name_index: BTreeMap<String, usize>,
+    pub output_links_id_index: BTreeMap<LinkId, usize>,
+    pub output_links_name_index: BTreeMap<String, usize>,
+    pub name: String,
+    pub input_links_ids: Vec<LinkId>,
+    pub input_links_names: Vec<String>,
+    pub output_links_ids: Vec<LinkId>,
+    pub output_links_names: Vec<String>,
+    pub providers: Vec<Arc<RwLock<Node>>>,
+    pub consumers: Vec<Vec<Weak<RwLock<Node>>>>,
 }
 
 impl Base {
@@ -288,5 +301,29 @@ impl Base {
 
     pub fn get_all_providers(&self) -> &[Arc<RwLock<Node>>] {
         &self.providers
+    }
+
+    pub fn create_new(&self) -> Self {
+        Self {
+            input_links_id_index: self.input_links_id_index.clone(),
+            input_links_name_index: self.input_links_name_index.clone(),
+            output_links_id_index: self.output_links_id_index.clone(),
+            output_links_name_index: self.output_links_name_index.clone(),
+            name: self.name.clone(),
+            input_links_ids: self.input_links_ids.clone(),
+            input_links_names: self.input_links_names.clone(),
+            output_links_ids: self.output_links_ids.clone(),
+            output_links_names: self.output_links_names.clone(),
+            providers: Vec::new(),
+            consumers: Vec::new(),
+        }
+    }
+
+    pub fn register_consumer_for_link(&mut self, index: usize, c: Weak<RwLock<Node>>) {
+        self.consumers[index].push(c);
+    }
+
+    pub fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>) {
+        self.providers[index] = p;
     }
 }

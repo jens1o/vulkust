@@ -1,3 +1,4 @@
+use super::super::super::core::types::Id;
 /// Operation Type of a tree can be Graphic, Compute, Transpher, ...
 /// A `Tree` itself can be a `Node`
 /// A `Tree` can be feeded with several things like Model, Scene, Material, Mesh or other production of other tree
