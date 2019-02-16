@@ -144,6 +144,7 @@ impl GBufferFiller {
         };
         let render_data = RenderData::new(&*geng);
         let base = Base::new(
+            super::G_BUFFER_FILLER_NODE,
             "g-buffer-filler".to_string(),
             Vec::new(),
             Vec::new(),

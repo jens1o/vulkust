@@ -7,9 +7,7 @@ pub mod ssr;
 
 use super::super::super::core::debug::Debug as CoreDebug;
 use super::super::super::core::types::Id;
-use super::super::engine::Engine;
 use super::super::gapi::GraphicApiEngine;
-use super::super::scene::Scene;
 use super::super::texture::Texture;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, Weak};
@@ -60,6 +58,17 @@ const SINGLE_OUTPUT_NAME: &'static str = "single-output";
 const ALBEDO: LinkId = 9;
 const ALBEDO_NAME: &'static str = "albedo";
 
+pub type NodeId = Id;
+
+const G_BUFFER_FILLER_NODE: NodeId = 1;
+const DEFERRED_PBR_NODE: NodeId = 2;
+const SHADOW_MAPPER_NODE: NodeId = 3;
+const SSAO_NODE: NodeId = 4;
+const SSR_NODE: NodeId = 5;
+const SHADOW_ACCUMULATOR_DIRECTIONAL_NODE: NodeId = 6;
+const SHADOW_ACCUMULATOR_POINT_NODE: NodeId = 7;
+const SHADOW_ACCUMULATOR_CONE_NODE: NodeId = 8;
+
 pub trait Node: CoreDebug {
     /// Implementor of trait either can provide this methode or it must implement all other default implementations
     fn get_base(&self) -> &Base {
@@ -72,6 +81,10 @@ pub trait Node: CoreDebug {
 
     fn create_new(&self, geng: &GraphicApiEngine) -> Arc<RwLock<Node>>;
     fn get_output_texture(&self, usize) -> &Arc<RwLock<Texture>>;
+
+    fn get_node_id(&self) -> NodeId {
+        self.get_base().get_node_id()
+    }
 
     fn register_consumer_for_link(&mut self, index: usize, c: Weak<RwLock<Node>>) {
         self.get_mut_base().register_consumer_for_link(index, c);
@@ -178,6 +191,7 @@ pub struct Base {
     pub input_links_name_index: BTreeMap<String, usize>,
     pub output_links_id_index: BTreeMap<LinkId, usize>,
     pub output_links_name_index: BTreeMap<String, usize>,
+    pub node_id: NodeId,
     pub name: String,
     pub input_links_ids: Vec<LinkId>,
     pub input_links_names: Vec<String>,
@@ -189,6 +203,7 @@ pub struct Base {
 
 impl Base {
     pub fn new(
+        node_id: NodeId,
         name: String,
         input_links_names: Vec<String>,
         input_links_ids: Vec<LinkId>,
@@ -210,6 +225,7 @@ impl Base {
         let providers = Vec::new();
         let consumers = Vec::new();
         Self {
+            node_id,
             name,
             input_links_names,
             input_links_ids,
@@ -310,6 +326,7 @@ impl Base {
             input_links_name_index: self.input_links_name_index.clone(),
             output_links_id_index: self.output_links_id_index.clone(),
             output_links_name_index: self.output_links_name_index.clone(),
+            node_id: self.node_id,
             name: self.name.clone(),
             input_links_ids: self.input_links_ids.clone(),
             input_links_names: self.input_links_names.clone(),
@@ -326,5 +343,9 @@ impl Base {
 
     pub fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>) {
         self.providers[index] = p;
+    }
+
+    pub fn get_node_id(&self) -> NodeId {
+        self.node_id
     }
 }
