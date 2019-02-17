@@ -89,7 +89,7 @@ pub struct GBufferFiller {
 }
 
 impl GBufferFiller {
-    pub(super) fn new(eng: &Engine) -> Self {
+    pub fn new(eng: &Engine) -> Self {
         let geng = eng.get_gapi_engine();
         let geng = vxresult!(geng.read());
         let dev = geng.get_device();

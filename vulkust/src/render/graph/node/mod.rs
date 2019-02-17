@@ -1,3 +1,4 @@
+pub mod deferred_pbr;
 pub mod g_buffer_filler;
 pub mod manager;
 pub mod shadow_accumulator;
@@ -31,32 +32,38 @@ use std::sync::{Arc, RwLock, Weak};
 
 pub type LinkId = Id;
 
-const POSITION: LinkId = 1;
-const POSITION_NAME: &'static str = "position";
+const POSITION_LINK: LinkId = 1;
+const POSITION_NAME_LINK: &'static str = "position";
 
-const NORMAL: LinkId = 2;
-const NORMAL_NAME: &'static str = "normal";
+const NORMAL_LINK: LinkId = 2;
+const NORMAL_NAME_LINK: &'static str = "normal";
 
-const TANGENT: LinkId = 3;
-const TANGENT_NAME: &'static str = "tangent";
+const TANGENT_LINK: LinkId = 3;
+const TANGENT_NAME_LINK: &'static str = "tangent";
 
-const BITANGENT: LinkId = 4;
-const BITANGENT_NAME: &'static str = "bitangent";
+const BITANGENT_LINK: LinkId = 4;
+const BITANGENT_NAME_LINK: &'static str = "bitangent";
 
-const DEPTH: LinkId = 5;
-const DEPTH_NAME: &'static str = "depth";
+const DEPTH_LINK: LinkId = 5;
+const DEPTH_NAME_LINK: &'static str = "depth";
 
-const OCCLUSION: LinkId = 6;
-const OCCLUSION_NAME: &'static str = "occlusion";
+const OCCLUSION_LINK: LinkId = 6;
+const OCCLUSION_NAME_LINK: &'static str = "occlusion";
 
-const SINGLE_INPUT: LinkId = 7;
-const SINGLE_INPUT_NAME: &'static str = "single-input";
+const SINGLE_INPUT_LINK: LinkId = 7;
+const SINGLE_INPUT_NAME_LINK: &'static str = "single-input";
 
-const SINGLE_OUTPUT: LinkId = 8;
-const SINGLE_OUTPUT_NAME: &'static str = "single-output";
+const SINGLE_OUTPUT_LINK: LinkId = 8;
+const SINGLE_OUTPUT_NAME_LINK: &'static str = "single-output";
 
-const ALBEDO: LinkId = 9;
-const ALBEDO_NAME: &'static str = "albedo";
+const ALBEDO_LINK: LinkId = 9;
+const ALBEDO_NAME_LINK: &'static str = "albedo";
+
+const ACCUMULATED_SHADOWS_LINK: LinkId = 10;
+const ACCUMULATED_SHADOWS_NAME_LINK: &'static str = "accumulated-shadows";
+
+const COLOR_LINK: LinkId = 11;
+const COLOR_NAME_LINK: &'static str = "color";
 
 pub type NodeId = Id;
 

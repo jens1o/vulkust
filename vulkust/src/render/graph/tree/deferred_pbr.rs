@@ -47,7 +47,7 @@ impl DeferredPBR {
     ) -> Self {
         let gbuff_framebuffer = g_buffer_filler.get_framebuffer();
         let (w, h) = gbuff_framebuffer.get_dimensions();
-        let uniform = Uniform::new(w as f32, h as f32);
+        let uniform = Uniform::new(w as Real, h as Real);
         let uniform_buffer = vxresult!(gapi_engine.get_buffer_manager().write())
             .create_dynamic_buffer(size_of::<Uniform>() as isize);
         let mut textures: Vec<Arc<RwLock<Texture>>> =
