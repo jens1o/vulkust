@@ -15,13 +15,18 @@ use super::{Base, LinkId, Node};
 use std::sync::{Arc, Mutex, RwLock};
 
 const LINKS_NAMES: [&str; 4] = [
-    super::POSITION_NAME,
-    super::NORMAL_NAME,
-    super::ALBEDO_NAME,
-    super::DEPTH_NAME,
+    super::POSITION_NAME_LINK,
+    super::NORMAL_NAME_LINK,
+    super::ALBEDO_NAME_LINK,
+    super::DEPTH_NAME_LINK,
 ];
 
-const LINKS_IDS: [LinkId; 4] = [super::POSITION, super::NORMAL, super::ALBEDO, super::DEPTH];
+const LINKS_IDS: [LinkId; 4] = [
+    super::POSITION_LINK,
+    super::NORMAL_LINK,
+    super::ALBEDO_LINK,
+    super::DEPTH_LINK,
+];
 
 #[cfg_attr(debug_mode, derive(Debug))]
 struct KernelData {

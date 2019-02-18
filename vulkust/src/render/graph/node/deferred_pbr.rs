@@ -12,7 +12,7 @@ use super::super::super::render_pass::RenderPass;
 use super::super::super::sampler::Filter;
 use super::super::super::scene::Scene;
 use super::super::super::sync::Semaphore;
-use super::super::super::texture::Texture;
+use super::super::super::texture::{Manager as TextureManager, Texture};
 use super::{Base, LinkId, Node};
 use cgmath;
 use std::mem::size_of;
@@ -74,10 +74,10 @@ impl Uniform {
 #[cfg_attr(debug_mode, derive(Debug))]
 struct RenderData {
     frames_data: Vec<FrameData>,
-    input_textures: Vec<Arc<RwLock<Texture>>>,
     uniform: Uniform,
     uniform_buffer: DynamicBuffer,
-    descriptor_set: Arc<DescriptorSet>,
+    descriptor_set: Option<Arc<DescriptorSet>>,
+    input_textures: Vec<Option<Arc<RwLock<Texture>>>>,
 }
 
 impl RenderData {
@@ -95,7 +95,8 @@ impl RenderData {
             frames_data,
             uniform,
             uniform_buffer,
-            input_textures,
+            descriptor_set: None,
+            input_textures: Vec::new(),
         }
     }
 }
@@ -130,8 +131,6 @@ impl DeferredPbr {
             AttachmentType::ColorGBuffer,
         ));
         let sampler = vxresult!(geng.get_sampler_manager().write()).load(Filter::Nearest);
-        let texture = vxresult!(eng.get_asset_manager().get_texture_manager().write())
-            .create_2d_with_view_sampler(buffer.clone(), sampler);
         let render_pass = Arc::new(RenderPass::new(vec![buffer.clone()], true, true));
         let framebuffer = Arc::new(Framebuffer::new(vec![buffer], render_pass.clone()));
         let pipeline = vxresult!(geng.get_pipeline_manager().write()).create(
@@ -139,13 +138,6 @@ impl DeferredPbr {
             PipelineType::DeferredPbr,
             eng.get_config(),
         );
-        let shared_data = SharedData {
-            texture,
-            framebuffer,
-            render_pass,
-            pipeline,
-        };
-        let render_data = RenderData::new(&geng);
         let base = Base::new(
             super::DEFERRED_PBR_NODE,
             "deferred-pbr".to_string(),
@@ -163,13 +155,55 @@ impl DeferredPbr {
                 }
                 ids
             },
-            vec![super::COLOR],
-            vec![super::COLOR_NAME.to_string()],
+            vec![super::COLOR_NAME_LINK.to_string()],
+            vec![super::COLOR_LINK],
         );
+        let texture = vxresult!(eng.get_asset_manager().get_texture_manager().write())
+            .create_2d_with_view_sampler(buffer.clone(), sampler);
+        let shared_data = SharedData {
+            texture,
+            framebuffer,
+            render_pass,
+            pipeline,
+        };
+        let render_data = RenderData::new(&geng);
         Self {
             base,
             shared_data,
             render_data,
         }
+    }
+}
+
+impl Node for DeferredPbr {
+    fn get_base(&self) -> &Base {
+        &self.base
+    }
+
+    fn get_mut_base(&mut self) -> &mut Base {
+        &mut self.base
+    }
+
+    fn create_new(&self, geng: &GraphicApiEngine) -> Arc<RwLock<Node>> {
+        Arc::new(RwLock::new(Self {
+            base: self.base.create_new(),
+            shared_data: self.shared_data.clone(),
+            render_data: RenderData::new(geng),
+        }))
+    }
+
+    fn get_output_texture(&self, index: usize) -> &Arc<RwLock<Texture>> {
+        #[cfg(debug_mode)]
+        {
+            if index != 0 {
+                vxlogf!("Index out of range.");
+            }
+        }
+        &self.shared_data.texture
+    }
+
+    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>) {
+        // TODO
+        self.get_mut_base().register_provider_for_link(index, p);
     }
 }
