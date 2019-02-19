@@ -41,6 +41,9 @@ struct FrameData {
     pri_cmd: CmdBuffer,
     sec_cmd: CmdBuffer,
     semaphore: Arc<Semaphore>,
+    descriptor_set: Option<Arc<DescriptorSet>>,
+    /// Whenever this was true the descriptor set for that frame must be updated
+    input_textures_changed: bool,
 }
 
 impl FrameData {
@@ -52,6 +55,8 @@ impl FrameData {
             pri_cmd,
             sec_cmd,
             semaphore,
+            descriptor_set: None,
+            input_textures_changed: false,
         }
     }
 }
@@ -76,7 +81,6 @@ struct RenderData {
     frames_data: Vec<FrameData>,
     uniform: Uniform,
     uniform_buffer: DynamicBuffer,
-    descriptor_set: Option<Arc<DescriptorSet>>,
     input_textures: Vec<Option<Arc<RwLock<Texture>>>>,
 }
 
@@ -95,7 +99,6 @@ impl RenderData {
             frames_data,
             uniform,
             uniform_buffer,
-            descriptor_set: None,
             input_textures: Vec::new(),
         }
     }
@@ -202,8 +205,12 @@ impl Node for DeferredPbr {
         &self.shared_data.texture
     }
 
-    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>) {
-        // TODO
+    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>, p_index: usize) {
+        self.render_data.input_textures[index] =
+            Some(vxresult!(p.read()).get_output_texture(p_index).clone());
+        for fd in &mut self.render_data.frames_data {
+            fd.input_textures_changed = true;
+        }
         self.get_mut_base().register_provider_for_link(index, p);
     }
 }

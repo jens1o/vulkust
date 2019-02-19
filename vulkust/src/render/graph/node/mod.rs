@@ -93,39 +93,63 @@ pub trait Node: CoreDebug {
         self.get_base().get_node_id()
     }
 
-    fn register_consumer_for_link(&mut self, index: usize, c: Weak<RwLock<Node>>) {
+    fn register_consumer_for_link(&mut self, index: usize, c: Weak<RwLock<Node>>, _c_index: usize) {
         self.get_mut_base().register_consumer_for_link(index, c);
     }
 
-    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>) {
+    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>, _p_index: usize) {
         self.get_mut_base().register_provider_for_link(index, p);
     }
 
-    fn register_consumer_for_link_by_name(&mut self, name: &str, o: Weak<RwLock<Node>>) {
+    fn register_consumer_for_link_by_name(
+        &mut self,
+        name: &str,
+        o: Weak<RwLock<Node>>,
+        c_index: usize,
+    ) {
         self.register_consumer_for_link(
             vxunwrap!(self.get_base().get_output_link_index_by_name(name)),
             o,
+            c_index,
         );
     }
 
-    fn register_consumer_for_link_by_id(&mut self, id: LinkId, o: Weak<RwLock<Node>>) {
+    fn register_consumer_for_link_by_id(
+        &mut self,
+        id: LinkId,
+        o: Weak<RwLock<Node>>,
+        c_index: usize,
+    ) {
         self.register_consumer_for_link(
             vxunwrap!(self.get_base().get_output_link_index_by_id(id)),
             o,
+            c_index,
         );
     }
 
-    fn register_provider_for_link_by_name(&mut self, name: &str, o: Arc<RwLock<Node>>) {
+    fn register_provider_for_link_by_name(
+        &mut self,
+        name: &str,
+        o: Arc<RwLock<Node>>,
+        p_index: usize,
+    ) {
         self.register_provider_for_link(
             vxunwrap!(self.get_base().get_input_link_index_by_name(name)),
             o,
+            p_index,
         );
     }
 
-    fn register_provider_for_link_by_id(&mut self, id: LinkId, o: Arc<RwLock<Node>>) {
+    fn register_provider_for_link_by_id(
+        &mut self,
+        id: LinkId,
+        o: Arc<RwLock<Node>>,
+        p_index: usize,
+    ) {
         self.register_provider_for_link(
             vxunwrap!(self.get_base().get_input_link_index_by_id(id)),
             o,
+            p_index,
         );
     }
 
