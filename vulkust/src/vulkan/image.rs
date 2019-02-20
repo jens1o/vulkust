@@ -535,29 +535,21 @@ impl View {
         height: u32,
     ) -> Self {
         let aspect_mask = match attachment_type {
-            AttachmentType::ColorGBuffer | AttachmentType::ColorDisplay => {
-                vk::ImageAspectFlags::COLOR
-            }
-            AttachmentType::ShadowAccumulator => vk::ImageAspectFlags::COLOR,
-            AttachmentType::DepthGBuffer | AttachmentType::DepthShadowBuffer => {
-                vk::ImageAspectFlags::DEPTH
-            }
-            AttachmentType::DepthStencilDisplay => {
+            AttachmentType::Effect | AttachmentType::Display => vk::ImageAspectFlags::COLOR,
+            AttachmentType::Depth => vk::ImageAspectFlags::DEPTH,
+            AttachmentType::DepthStencil => {
                 vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
             }
         };
         let usage = match attachment_type {
-            AttachmentType::ColorGBuffer => {
+            AttachmentType::Effect => {
                 vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED
             }
-            AttachmentType::ShadowAccumulator => {
-                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED
-            }
-            AttachmentType::ColorDisplay => vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            AttachmentType::DepthGBuffer | AttachmentType::DepthShadowBuffer => {
+            AttachmentType::Display => vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            AttachmentType::Depth => {
                 vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED
             }
-            AttachmentType::DepthStencilDisplay => vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            AttachmentType::DepthStencil => vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
         };
         let vkfmt = vxresult!(memory_mgr.read())
             .get_device()

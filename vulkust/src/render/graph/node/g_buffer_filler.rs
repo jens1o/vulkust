@@ -105,25 +105,25 @@ impl GBufferFiller {
                 dev.clone(),
                 memmgr,
                 Format::RgbaFloat,
-                AttachmentType::ColorGBuffer,
+                AttachmentType::Effect,
             )),
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
                 Format::RgbaFloat,
-                AttachmentType::ColorGBuffer,
+                AttachmentType::Effect,
             )),
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
                 Format::RgbaFloat,
-                AttachmentType::ColorGBuffer,
+                AttachmentType::Effect,
             )),
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
                 Format::DepthFloat,
-                AttachmentType::DepthGBuffer,
+                AttachmentType::Depth,
             )),
         ];
         let sampler = vxresult!(geng.get_sampler_manager().write()).load(Filter::Nearest);

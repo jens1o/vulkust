@@ -9,12 +9,10 @@ pub use super::super::vulkan::image::*;
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub enum AttachmentType {
-    ColorGBuffer,
-    DepthGBuffer,
-    DepthShadowBuffer,
-    ColorDisplay,
-    DepthStencilDisplay,
-    ShadowAccumulator,
+    Depth,
+    DepthStencil,
+    Display,
+    Effect,
 }
 
 #[cfg_attr(debug_mode, derive(Debug))]

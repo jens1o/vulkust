@@ -206,8 +206,8 @@ impl Pipeline {
             .clone();
 
         let vert_bytes: &'static [u8] = match pipeline_type {
-            PipelineType::GBuffer => include_shader!("g-buffers-filler.vert"),
-            PipelineType::Deferred => include_shader!("deferred.vert"),
+            PipelineType::GBufferFiller => include_shader!("g-buffers-filler.vert"),
+            PipelineType::DeferredPbr => include_shader!("deferred.vert"),
             PipelineType::ShadowMapper => include_shader!("shadow-mapper.vert"),
             PipelineType::ShadowAccumulatorDirectional => {
                 include_shader!("shadow-accumulator-directional.vert")

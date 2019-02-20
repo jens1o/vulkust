@@ -1,6 +1,5 @@
 use super::super::super::super::core::types::Real;
 use super::super::super::buffer::Dynamic as DynamicBuffer;
-use super::super::super::camera::Camera;
 use super::super::super::command::Buffer as CmdBuffer;
 use super::super::super::descriptor::Set as DescriptorSet;
 use super::super::super::engine::Engine;
@@ -10,13 +9,12 @@ use super::super::super::image::{AttachmentType, Format, View as ImageView};
 use super::super::super::pipeline::{Pipeline, PipelineType};
 use super::super::super::render_pass::RenderPass;
 use super::super::super::sampler::Filter;
-use super::super::super::scene::Scene;
 use super::super::super::sync::Semaphore;
-use super::super::super::texture::{Manager as TextureManager, Texture};
+use super::super::super::texture::Texture;
 use super::{Base, LinkId, Node};
 use cgmath;
 use std::mem::size_of;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 const INPUT_LINKS_NAMES: [&str; 6] = [
     super::POSITION_NAME_LINK,
@@ -121,6 +119,8 @@ pub struct DeferredPbr {
     render_data: RenderData,
 }
 
+// TODO: It should have a function for changing output buffer
+
 impl DeferredPbr {
     pub fn new(eng: &Engine) -> Self {
         let geng = eng.get_gapi_engine();
@@ -131,7 +131,7 @@ impl DeferredPbr {
             dev.clone(),
             memmgr,
             Format::RgbaFloat,
-            AttachmentType::ColorGBuffer,
+            AttachmentType::Effect,
         ));
         let sampler = vxresult!(geng.get_sampler_manager().write()).load(Filter::Nearest);
         let render_pass = Arc::new(RenderPass::new(vec![buffer.clone()], true, true));
