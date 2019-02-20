@@ -1,5 +1,5 @@
 use super::super::super::super::core::types::Real;
-use super::super::super::buffer::{Buffer, Dynamic as DynamicBuffer};
+use super::super::super::buffer::{Buffer, Dynamic as DynamicBuffer, Manager as BufferManager};
 use super::super::super::command::Buffer as CmdBuffer;
 use super::super::super::descriptor::Set as DescriptorSet;
 use super::super::super::engine::Engine;
@@ -11,22 +11,11 @@ use super::super::super::render_pass::RenderPass;
 use super::super::super::sampler::Filter as SamplerFilter;
 use super::super::super::sync::Semaphore;
 use super::super::super::texture::Texture;
-use super::{Base, LinkId, Node};
-use std::mem::size_of;
-use std::sync::{Arc, RwLock, Weak};
+use super::{Base, Node};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use cgmath;
-use cgmath::InnerSpace;
-use rand;
-use rand::distributions::{Distribution as RandDis, Uniform as RandUni};
-
-const INPUT_LINKS_NAMES: [&str; 3] = [
-    super::POSITION_NAME_LINK,
-    super::NORMAL_NAME_LINK,
-    super::DEPTH_NAME_LINK,
-];
-
-const INPUT_LINKS_IDS: [LinkId; 3] = [super::POSITION_LINK, super::NORMAL_LINK, super::DEPTH_LINK];
+use cgmath::SquareMatrix;
 
 #[cfg_attr(debug_mode, derive(Debug))]
 struct KernelData {
@@ -49,7 +38,7 @@ impl KernelData {
 struct FrameData {
     pri_cmd: CmdBuffer,
     semaphore: Arc<Semaphore>,
-    kernels_data: Vec<KernelData>,
+    kernels_data: Vec<Mutex<KernelData>>,
 }
 
 impl FrameData {
@@ -59,7 +48,7 @@ impl FrameData {
         let kernels_count = num_cpus::get();
         let mut kernels_data = Vec::with_capacity(kernels_count);
         for _ in 0..kernels_count {
-            kernels_data.push(KernelData::new(geng));
+            kernels_data.push(Mutex::new(KernelData::new(geng)));
         }
         Self {
             pri_cmd,
@@ -72,34 +61,14 @@ impl FrameData {
 #[repr(C)]
 #[cfg_attr(debug_mode, derive(Debug))]
 struct Uniform {
-    mvp: cgmath::Vector4<Real>,
+    mvp: cgmath::Matrix4<Real>,
 }
 
 impl Uniform {
     pub fn new() -> Self {
-        let r1 = RandUni::from(-1f32..1f32);
-        let r2 = RandUni::from(0f32..1f32);
-        let mut rng = rand::thread_rng();
-        let mut sample_vectors = [cgmath::Vector4::new(0.0, 0.0, 0.0, 0.0); MAX_SSAO_SAMPLES_COUNT];
-        let mut sum_weight = 0.0;
-        for i in 0..MAX_SSAO_SAMPLES_COUNT {
-            let v = cgmath::Vector3::new(
-                r1.sample(&mut rng),
-                r1.sample(&mut rng),
-                r2.sample(&mut rng),
-            );
-            let sv = &mut sample_vectors[i];
-            sv.x = v.x;
-            sv.y = v.y;
-            sv.z = v.z;
-            sv.w = 2.4 - v.magnitude();
-            sum_weight += sv.w;
+        Self {
+            mvp: cgmath::Matrix4::identity(),
         }
-        let coef = -1.0 / sum_weight;
-        for i in 0..MAX_SSAO_SAMPLES_COUNT {
-            sample_vectors[i].w *= coef;
-        }
-        Self { sample_vectors }
     }
 }
 
@@ -107,7 +76,7 @@ impl Uniform {
 #[cfg_attr(debug_mode, derive(Debug))]
 struct RenderData {
     frames_data: Vec<FrameData>,
-    input_textures: Vec<Option<Arc<RwLock<Texture>>>>,
+    kernels_uniform_buffers: Vec<Mutex<Vec<DynamicBuffer>>>,
 }
 
 impl RenderData {
@@ -117,9 +86,14 @@ impl RenderData {
         for _ in 0..frames_count {
             frames_data.push(FrameData::new(geng));
         }
+        let kernels_count = num_cpus::get();
+        let mut kernels_uniform_buffers = Vec::with_capacity(kernels_count);
+        for _ in 0..kernels_count {
+            kernels_uniform_buffers.push(Mutex::new(Vec::new()));
+        }
         Self {
             frames_data,
-            input_textures: Vec::new(),
+            kernels_uniform_buffers,
         }
     }
 }
@@ -128,22 +102,23 @@ impl RenderData {
 #[cfg_attr(debug_mode, derive(Debug))]
 #[derive(Clone)]
 struct SharedData {
+    buffer_manager: Arc<RwLock<BufferManager>>,
     texture: Arc<RwLock<Texture>>,
     render_pass: Arc<RenderPass>,
     framebuffer: Arc<Framebuffer>,
     pipeline: Arc<Pipeline>,
-    uniform_buffer: DynamicBuffer,
 }
 
 #[cfg_attr(debug_mode, derive(Debug))]
-pub struct SSAO {
+pub struct ShadowMapper {
     base: Base,
     shared_data: SharedData,
     render_data: RenderData,
 }
 
-impl SSAO {
-    pub(crate) fn new(eng: &Engine) -> Self {
+impl ShadowMapper {
+    /// I can guess this is better to have totally new instance of this structre for each light's frustum.
+    pub fn new(eng: &Engine) -> Self {
         let geng = eng.get_gapi_engine();
         let geng = vxresult!(geng.read());
         let dev = geng.get_device();
@@ -151,15 +126,10 @@ impl SSAO {
         let buffers = vec![Arc::new(ImageView::new_surface_attachment(
             dev.clone(),
             memmgr,
-            Format::Float,
-            AttachmentType::Effect,
+            Format::DepthFloat,
+            AttachmentType::Depth,
         ))];
-        let uniform = Uniform::new();
-        let uniform_buffer = vxresult!(geng.get_buffer_manager().write())
-            .create_dynamic_buffer(size_of::<Uniform>() as isize);
-        for n in 0..geng.get_frames_count() {
-            uniform_buffer.update(&uniform, n);
-        }
+        let buffer_manager = geng.get_buffer_manager().clone();
         let texture = vxresult!(eng.get_asset_manager().get_texture_manager().write())
             .create_2d_with_view_sampler(
                 buffers[0].clone(),
@@ -173,27 +143,15 @@ impl SSAO {
             eng.get_config(),
         );
         let base = Base::new(
-            super::SSAO_NODE,
-            "ssao".to_string(),
-            {
-                let mut names = Vec::with_capacity(INPUT_LINKS_NAMES.len());
-                for l in &INPUT_LINKS_NAMES {
-                    names.push(l.to_string());
-                }
-                names
-            },
-            {
-                let mut ids = Vec::with_capacity(INPUT_LINKS_IDS.len());
-                for l in &INPUT_LINKS_IDS {
-                    ids.push(*l);
-                }
-                ids
-            },
+            super::SHADOW_MAPPER_NODE,
+            "shadow-mapper".to_string(),
+            Vec::new(),
+            Vec::new(),
             vec![super::SINGLE_OUTPUT_NAME_LINK.to_string()],
             vec![super::SINGLE_OUTPUT_LINK],
         );
         let shared_data = SharedData {
-            uniform_buffer,
+            buffer_manager,
             pipeline,
             render_pass,
             framebuffer,
@@ -237,7 +195,7 @@ impl SSAO {
     // }
 }
 
-impl Node for SSAO {
+impl Node for ShadowMapper {
     fn get_base(&self) -> &Base {
         &self.base
     }
@@ -262,14 +220,5 @@ impl Node for SSAO {
             }
         }
         &self.shared_data.texture
-    }
-
-    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>, p_index: usize) {
-        self.render_data.input_textures[index] =
-            Some(vxresult!(p.read()).get_output_texture(p_index).clone());
-        for fd in &mut self.render_data.frames_data {
-            fd.input_textures_changed = true;
-        }
-        self.get_mut_base().register_provider_for_link(index, p);
     }
 }
