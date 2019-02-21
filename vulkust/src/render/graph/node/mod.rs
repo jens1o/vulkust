@@ -1,4 +1,5 @@
 pub mod deferred_pbr;
+pub mod effect;
 pub mod g_buffer_filler;
 pub mod manager;
 pub mod shadow_accumulator;
@@ -64,6 +65,42 @@ const ACCUMULATED_SHADOWS_NAME_LINK: &'static str = "accumulated-shadows";
 
 const COLOR_LINK: LinkId = 11;
 const COLOR_NAME_LINK: &'static str = "color";
+
+const SHADOW_MAP_0_LINK: LinkId = 12;
+const SHADOW_MAP_0_NAME_LINK: &'static str = "shadow-map-0";
+
+const SHADOW_MAP_1_LINK: LinkId = 13;
+const SHADOW_MAP_1_NAME_LINK: &'static str = "shadow-map-1";
+
+const SHADOW_MAP_2_LINK: LinkId = 14;
+const SHADOW_MAP_2_NAME_LINK: &'static str = "shadow-map-2";
+
+const SHADOW_MAP_3_LINK: LinkId = 15;
+const SHADOW_MAP_3_NAME_LINK: &'static str = "shadow-map-3";
+
+const SHADOW_MAP_4_LINK: LinkId = 16;
+const SHADOW_MAP_4_NAME_LINK: &'static str = "shadow-map-4";
+
+const SHADOW_MAP_5_LINK: LinkId = 17;
+const SHADOW_MAP_5_NAME_LINK: &'static str = "shadow-map-5";
+
+const SHADOW_MAP_LINKS: [LinkId; 6] = [
+    SHADOW_MAP_0_LINK,
+    SHADOW_MAP_1_LINK,
+    SHADOW_MAP_2_LINK,
+    SHADOW_MAP_3_LINK,
+    SHADOW_MAP_4_LINK,
+    SHADOW_MAP_5_LINK,
+];
+
+const SHADOW_MAP_NAME_LINKS: [&'static str; 6] = [
+    SHADOW_MAP_0_NAME_LINK,
+    SHADOW_MAP_1_NAME_LINK,
+    SHADOW_MAP_2_NAME_LINK,
+    SHADOW_MAP_3_NAME_LINK,
+    SHADOW_MAP_4_NAME_LINK,
+    SHADOW_MAP_5_NAME_LINK,
+];
 
 pub type NodeId = Id;
 
