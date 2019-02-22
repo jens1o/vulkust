@@ -6,8 +6,6 @@
 
 #include "common.glsl"
 
-layout (constant_id = 0) const int DIRECTIONAL_CASCADES_COUNT = 6;
-
 layout (location = 0) out vec2 out_uv;
 
 layout (set = 0, binding = 0) uniform LightUBO { Light s; } light_ubo;

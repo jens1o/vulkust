@@ -6,8 +6,6 @@
 
 #include "common.glsl"
 
-layout (constant_id = 0) const int DIRECTIONAL_CASCADES_COUNT = 6;
-
 layout (location = 0) in vec2 uv;
 
 layout (location = 0) out float flagbits;
@@ -15,13 +13,44 @@ layout (location = 0) out float flagbits;
 layout (set = 0, binding = 0) uniform LightUBO { Light s; } light_ubo;
 layout (set = 0, binding = 1) uniform sampler2D position;
 layout (set = 0, binding = 2) uniform sampler2D normal;
-layout (set = 0, binding = 3) uniform sampler2D shadowmaps[DIRECTIONAL_CASCADES_COUNT];
+layout (set = 0, binding = 3) uniform sampler2D shadowmap0;
+layout (set = 0, binding = 4) uniform sampler2D shadowmap1;
+layout (set = 0, binding = 5) uniform sampler2D shadowmap2;
+layout (set = 0, binding = 6) uniform sampler2D shadowmap3;
+layout (set = 0, binding = 7) uniform sampler2D shadowmap4;
+layout (set = 0, binding = 8) uniform sampler2D shadowmap5;
 
 void shade() {
     flagbits = (float(1 << light_ubo.s.light_index) * 
         (1.0 / float(1 << MAX_DIRECTIONAL_LIGHTS_COUNT))) + 
         (1.0 / (float(1 << MAX_DIRECTIONAL_LIGHTS_COUNT) * 4.0 * 
         float(MAX_DIRECTIONAL_LIGHTS_COUNT)));
+}
+
+float get_shadow(const int i, const vec2 uv) {
+    switch(i) {
+    case 0:
+        return texture(shadowmap0, uv).x;
+        break;
+    case 1:
+        return texture(shadowmap1, uv).x;
+        break;
+    case 2:
+        return texture(shadowmap2, uv).x;
+        break;
+    case 3:
+        return texture(shadowmap3, uv).x;
+        break;
+    case 4:
+        return texture(shadowmap4, uv).x;
+        break;
+    case 5:
+        return texture(shadowmap5, uv).x;
+        break;
+    default:
+        return -1000.0;
+        break;
+    }
 }
 
 void main() {
@@ -64,7 +93,7 @@ void main() {
             continue;
         if(depth > 1.0)
             continue;
-        if(texture(shadowmaps[i], uv).x + bias < depth) {
+        if(get_shadow(i, uv) + bias < depth) {
             shade();
             return;
         }

@@ -1,18 +1,11 @@
 use super::super::super::super::core::types::Real;
-use super::super::super::buffer::Dynamic as DynamicBuffer;
-use super::super::super::command::Buffer as CmdBuffer;
-use super::super::super::descriptor::Set as DescriptorSet;
 use super::super::super::engine::Engine;
-use super::super::super::framebuffer::Framebuffer;
 use super::super::super::gapi::GraphicApiEngine;
-use super::super::super::image::{AttachmentType, Format, View as ImageView};
-use super::super::super::pipeline::{Pipeline, PipelineType};
-use super::super::super::render_pass::RenderPass;
-use super::super::super::sampler::Filter as SamplerFilter;
-use super::super::super::sync::Semaphore;
+use super::super::super::image::Format;
+use super::super::super::pipeline::PipelineType;
 use super::super::super::texture::Texture;
-use super::{Base, LinkId, Node};
-use std::mem::size_of;
+use super::effect::{Base as EffectBase, BufferInfo, InputInfo};
+use super::{Base as NodeBase, Node};
 use std::sync::{Arc, RwLock};
 
 use cgmath;
@@ -20,42 +13,25 @@ use cgmath::InnerSpace;
 use rand;
 use rand::distributions::{Distribution as RandDis, Uniform as RandUni};
 
-const INPUT_LINKS_NAMES: [&str; 3] = [
-    super::POSITION_NAME_LINK,
-    super::NORMAL_NAME_LINK,
-    super::DEPTH_NAME_LINK,
+pub const INPUT_INFOS: [InputInfo; 3] = [
+    InputInfo {
+        id: super::POSITION_LINK,
+        name: super::POSITION_NAME_LINK,
+    },
+    InputInfo {
+        id: super::NORMAL_LINK,
+        name: super::NORMAL_NAME_LINK,
+    },
+    InputInfo {
+        id: super::DEPTH_LINK,
+        name: super::DEPTH_NAME_LINK,
+    },
 ];
-
-const INPUT_LINKS_IDS: [LinkId; 3] = [super::POSITION_LINK, super::NORMAL_LINK, super::DEPTH_LINK];
 
 const MAX_SSAO_SAMPLES_COUNT: usize = 128;
 
-#[cfg_attr(debug_mode, derive(Debug))]
-struct FrameData {
-    pri_cmd: CmdBuffer,
-    sec_cmd: CmdBuffer,
-    semaphore: Arc<Semaphore>,
-    descriptor_set: Option<Arc<DescriptorSet>>,
-    /// Whenever this was true the descriptor set for that frame must be updated
-    input_textures_changed: bool,
-}
-
-impl FrameData {
-    fn new(geng: &GraphicApiEngine) -> Self {
-        let pri_cmd = geng.create_primary_command_buffer_from_main_graphic_pool();
-        let sec_cmd = geng.create_secondary_command_buffer_from_main_graphic_pool();
-        let semaphore = Arc::new(geng.create_semaphore());
-        Self {
-            pri_cmd,
-            sec_cmd,
-            semaphore,
-            descriptor_set: None,
-            input_textures_changed: false,
-        }
-    }
-}
-
 #[repr(C)]
+#[derive(Clone)]
 struct Uniform {
     sample_vectors: [cgmath::Vector4<Real>; MAX_SSAO_SAMPLES_COUNT],
 }
@@ -63,7 +39,7 @@ struct Uniform {
 #[cfg(debug_mode)]
 impl std::fmt::Debug for Uniform {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        return write!(f, "SSAO Uniform");
+        write!(f, "SSAO Uniform")
     }
 }
 
@@ -95,108 +71,29 @@ impl Uniform {
     }
 }
 
-/// This struct is gonna be created for each instance
-#[cfg_attr(debug_mode, derive(Debug))]
-struct RenderData {
-    frames_data: Vec<FrameData>,
-    input_textures: Vec<Option<Arc<RwLock<Texture>>>>,
-}
-
-impl RenderData {
-    fn new(geng: &GraphicApiEngine) -> Self {
-        let frames_count = geng.get_frames_count();
-        let mut frames_data = Vec::with_capacity(frames_count);
-        for _ in 0..frames_count {
-            frames_data.push(FrameData::new(geng));
-        }
-        Self {
-            frames_data,
-            input_textures: Vec::new(),
-        }
-    }
-}
-
-/// This struct is gonna be created for each instance
-#[cfg_attr(debug_mode, derive(Debug))]
-#[derive(Clone)]
-struct SharedData {
-    texture: Arc<RwLock<Texture>>,
-    render_pass: Arc<RenderPass>,
-    framebuffer: Arc<Framebuffer>,
-    pipeline: Arc<Pipeline>,
-    uniform_buffer: DynamicBuffer,
-}
-
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct SSAO {
-    base: Base,
-    shared_data: SharedData,
-    render_data: RenderData,
+    base: EffectBase<Uniform>,
 }
 
 impl SSAO {
-    pub(crate) fn new(eng: &Engine) -> Self {
-        let geng = eng.get_gapi_engine();
-        let geng = vxresult!(geng.read());
-        let dev = geng.get_device();
-        let memmgr = geng.get_memory_manager();
-        let buffers = vec![Arc::new(ImageView::new_surface_attachment(
-            dev.clone(),
-            memmgr,
-            Format::Float,
-            AttachmentType::Effect,
-        ))];
-        let uniform = Uniform::new();
-        let uniform_buffer = vxresult!(geng.get_buffer_manager().write())
-            .create_dynamic_buffer(size_of::<Uniform>() as isize);
-        for n in 0..geng.get_frames_count() {
-            uniform_buffer.update(&uniform, n);
-        }
-        let texture = vxresult!(eng.get_asset_manager().get_texture_manager().write())
-            .create_2d_with_view_sampler(
-                buffers[0].clone(),
-                vxresult!(geng.get_sampler_manager().write()).load(SamplerFilter::Linear),
-            );
-        let render_pass = Arc::new(RenderPass::new(buffers.clone(), true, true));
-        let framebuffer = Arc::new(Framebuffer::new(buffers, render_pass.clone()));
-        let pipeline = vxresult!(geng.get_pipeline_manager().write()).create(
-            render_pass.clone(),
+    pub(crate) fn new(eng: &Engine, width: usize, height: usize) -> Self {
+        let base = EffectBase::new_with_buffer_info(
+            eng,
+            &[BufferInfo {
+                width,
+                height,
+                format: Format::FloatUniform8,
+                id: super::SINGLE_OUTPUT_LINK,
+                name: super::SINGLE_OUTPUT_NAME_LINK,
+            }],
+            Uniform::new(),
             PipelineType::SSAO,
-            eng.get_config(),
-        );
-        let base = Base::new(
             super::SSAO_NODE,
-            "ssao".to_string(),
-            {
-                let mut names = Vec::with_capacity(INPUT_LINKS_NAMES.len());
-                for l in &INPUT_LINKS_NAMES {
-                    names.push(l.to_string());
-                }
-                names
-            },
-            {
-                let mut ids = Vec::with_capacity(INPUT_LINKS_IDS.len());
-                for l in &INPUT_LINKS_IDS {
-                    ids.push(*l);
-                }
-                ids
-            },
-            vec![super::SINGLE_OUTPUT_NAME_LINK.to_string()],
-            vec![super::SINGLE_OUTPUT_LINK],
+            "ssao",
+            &INPUT_INFOS,
         );
-        let shared_data = SharedData {
-            uniform_buffer,
-            pipeline,
-            render_pass,
-            framebuffer,
-            texture,
-        };
-        let render_data = RenderData::new(&*geng);
-        Self {
-            base,
-            shared_data,
-            render_data,
-        }
+        Self { base }
     }
 
     // pub(super) fn begin_secondary(&self, cmd: &mut CmdBuffer) {
@@ -230,38 +127,19 @@ impl SSAO {
 }
 
 impl Node for SSAO {
-    fn get_base(&self) -> &Base {
-        &self.base
+    fn get_base(&self) -> &NodeBase {
+        self.base.get_base()
     }
 
-    fn get_mut_base(&mut self) -> &mut Base {
-        &mut self.base
+    fn get_mut_base(&mut self) -> &mut NodeBase {
+        self.base.get_mut_base()
     }
 
     fn create_new(&self, geng: &GraphicApiEngine) -> Arc<RwLock<Node>> {
-        Arc::new(RwLock::new(Self {
-            base: self.base.create_new(),
-            shared_data: self.shared_data.clone(),
-            render_data: RenderData::new(geng),
-        }))
+        self.base.create_new(geng)
     }
 
     fn get_output_texture(&self, index: usize) -> &Arc<RwLock<Texture>> {
-        #[cfg(debug_mode)]
-        {
-            if index != 0 {
-                vxlogf!("Index out of range.");
-            }
-        }
-        &self.shared_data.texture
-    }
-
-    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>, p_index: usize) {
-        self.render_data.input_textures[index] =
-            Some(vxresult!(p.read()).get_output_texture(p_index).clone());
-        for fd in &mut self.render_data.frames_data {
-            fd.input_textures_changed = true;
-        }
-        self.get_mut_base().register_provider_for_link(index, p);
+        self.base.get_output_texture(index)
     }
 }

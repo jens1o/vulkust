@@ -125,7 +125,7 @@ impl ShadowMapper {
         let memmgr = geng.get_memory_manager();
         let buffers = vec![Arc::new(ImageView::new_attachment(
             memmgr,
-            Format::DepthFloat,
+            Format::DepthFloat32,
             AttachmentType::Depth,
             width as u32,
             height as u32,

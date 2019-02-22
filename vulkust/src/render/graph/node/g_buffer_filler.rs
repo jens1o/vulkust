@@ -104,25 +104,25 @@ impl GBufferFiller {
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
-                Format::RgbaFloat,
+                Format::RgbaFloat16,
                 AttachmentType::Effect,
             )),
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
-                Format::RgbaFloat,
+                Format::RgbaFloat16,
                 AttachmentType::Effect,
             )),
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
-                Format::RgbaFloat,
+                Format::RgbaFloat16,
                 AttachmentType::Effect,
             )),
             Arc::new(ImageView::new_surface_attachment(
                 dev.clone(),
                 memmgr,
-                Format::DepthFloat,
+                Format::DepthFloat32,
                 AttachmentType::Depth,
             )),
         ];

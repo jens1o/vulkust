@@ -63,7 +63,7 @@ impl DeferredPbr {
             &[BufferInfo {
                 width: width,
                 height: height,
-                format: Format::RgbaFloat,
+                format: Format::RgbaFloat16,
                 id: super::SINGLE_OUTPUT_LINK,
                 name: super::SINGLE_OUTPUT_NAME_LINK,
             }],
@@ -92,9 +92,5 @@ impl Node for DeferredPbr {
 
     fn get_output_texture(&self, index: usize) -> &Arc<RwLock<Texture>> {
         self.base.get_output_texture(index)
-    }
-
-    fn register_provider_for_link(&mut self, index: usize, p: Arc<RwLock<Node>>, p_index: usize) {
-        self.base.register_provider_for_link(index, p, p_index)
     }
 }

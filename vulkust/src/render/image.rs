@@ -17,10 +17,15 @@ pub enum AttachmentType {
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub enum Format {
-    RgbaFloat,
+    RgbaFloat16,
+    RgbaFloat32,
     RgbaByte,
-    DepthFloat,
-    Float,
+    DepthFloat16,
+    DepthFloat24,
+    DepthFloat32,
+    FloatUniform8,
+    Float16,
+    Float32,
     FlagBits8,
     FlagBits32,
     FlagBits64,
