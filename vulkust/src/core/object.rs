@@ -11,26 +11,60 @@ pub fn create_id() -> Id {
 
 pub trait Object: Debug {
     fn get_id(&self) -> Id;
+    fn get_name(&self) -> Option<&str>;
 }
 
 #[cfg_attr(debug_mode, derive(Debug))]
 pub struct Base {
-    pub id: Id,
+    id: Id,
+    name: Option<String>,
 }
 
 impl Base {
-    pub fn new() -> Self {
-        Base { id: create_id() }
+    pub fn builder() -> Builder {
+        Builder {
+            id: None,
+            name: None,
+        }
+    }
+}
+
+pub struct Builder {
+    id: Option<Id>,
+    name: Option<String>,
+}
+
+impl Builder {
+    pub fn id(self, id: Id) -> Self {
+        self.id = Some(id);
+        self
     }
 
-    pub fn new_with_id(id: Id) -> Self {
-        Base { id }
+    pub fn name(self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn build(self) -> Base {
+        let id = if let Some(id) = self.id {
+            id
+        } else {
+            create_id()
+        };
+        Base {
+            id,
+            name: self.name,
+        }
     }
 }
 
 impl Object for Base {
     fn get_id(&self) -> Id {
         self.id
+    }
+
+    fn get_name(&self) -> Option<&str> {
+        self.name.as_ref()
     }
 }
 
@@ -39,7 +73,11 @@ where
     T: Object,
 {
     fn get_id(&self) -> Id {
-        return self.get_id();
+        self.get_id()
+    }
+
+    fn get_name(&self) -> Option<&str> {
+        self.get_name()
     }
 }
 
@@ -48,7 +86,11 @@ where
     T: Object,
 {
     fn get_id(&self) -> Id {
-        return vxresult!(self.lock()).get_id();
+        vxresult!(self.lock()).get_id()
+    }
+
+    fn get_name(&self) -> Option<&str> {
+        vxresult!(self.lock()).get_name()
     }
 }
 
@@ -57,6 +99,73 @@ where
     T: Object,
 {
     fn get_id(&self) -> Id {
-        return vxresult!(self.read()).get_id();
+        vxresult!(self.read()).get_id()
+    }
+
+    fn get_name(&self) -> Option<&str> {
+        vxresult!(self.read()).get_name()
     }
 }
+
+macro_rules! create_has_base {
+    () => {
+        pub trait HasBase {
+            fn get_base(&self) -> &Base;
+            fn get_mut_base(&mut self) -> &mut Base;
+        }
+
+        impl<T> HasBase for Arc<Mutex<T>>
+        where
+            T: HasBase,
+        {
+            fn get_base(&self) -> &Base {
+                vxresult!(self.lock()).get_base()
+            }
+
+            fn get_mut_base(&mut self) -> &mut Base {
+                vxresult!(self.lock()).get_mut_base()
+            }
+        }
+
+        impl<T> HasBase for Mutex<T>
+        where
+            T: HasBase,
+        {
+            fn get_base(&self) -> &Base {
+                vxresult!(self.lock()).get_base()
+            }
+
+            fn get_mut_base(&mut self) -> &mut Base {
+                vxresult!(self.lock()).get_mut_base()
+            }
+        }
+
+        impl<T> HasBase for Arc<RwLock<T>>
+        where
+            T: HasBase,
+        {
+            fn get_base(&self) -> &Base {
+                vxresult!(self.read()).get_base()
+            }
+
+            fn get_mut_base(&mut self) -> &mut Base {
+                vxresult!(self.write()).get_mut_base()
+            }
+        }
+
+        impl<T> HasBase for RwLock<T>
+        where
+            T: HasBase,
+        {
+            fn get_base(&self) -> &Base {
+                vxresult!(self.read()).get_base()
+            }
+
+            fn get_mut_base(&mut self) -> &mut Base {
+                vxresult!(self.write()).get_mut_base()
+            }
+        }
+    };
+}
+
+create_has_base!();
